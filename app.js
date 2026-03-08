@@ -396,10 +396,6 @@ function shouldSkipDuplicateAutoSave(file, extracted) {
 function revealSavedExpense(expense) {
   if (!expense) return;
   showTab('expenses');
-  const searchInput = document.getElementById('search-input');
-  if (searchInput && expense.provider) {
-    searchInput.value = expense.provider;
-  }
   renderTable();
 }
 
@@ -471,15 +467,17 @@ async function processReceiptFile(file) {
 async function notifySpreadsheetEmail(action, expense) {
   if (!supabaseClient || isLocalMode) return;
   try {
-    await supabaseClient.functions.invoke(EMAIL_UPDATE_FUNCTION, {
+    const { error } = await supabaseClient.functions.invoke(EMAIL_UPDATE_FUNCTION, {
       body: {
         action,
         recipient: UPDATE_EMAIL_RECIPIENT,
         expenseId: expense?.id || null,
       }
     });
+    if (error) throw error;
   } catch (e) {
     console.warn('Email notification failed:', e);
+    toast(`Saved, but email failed: ${e.message || 'unknown error'}`, true);
   }
 }
 
@@ -603,7 +601,7 @@ function setLocalModeSync() {
   const dot = document.getElementById('sync-dot');
   const label = document.getElementById('sync-label');
   dot.className = 'sync-dot';
-  label.textContent = 'Local';
+  label.textContent = 'Local (no sync/email)';
 }
 
 async function loadSeedExpenses() {
