@@ -5,6 +5,13 @@ const PROPERTY_COST = 500000;
 const CONFIG_KEY = 'pender_supabase_config';
 const SEED_DATA_PATH = 'expenses_seed.json';
 const LOCAL_EXPENSES_KEY = 'pender_local_expenses';
+const OCR_MIN_TEXT_LENGTH = 30;
+const AUTO_ADD_FROM_RECEIPT = true;
+const AI_RECEIPT_FUNCTION = 'extract-receipt-expense';
+const EMAIL_UPDATE_FUNCTION = 'email-expenses-update';
+const UPDATE_EMAIL_RECIPIENT = 'michaelwindeyer@gmail.com';
+const MAX_AUTO_PARSED_AMOUNT = 250000;
+const MIN_REASONABLE_YEAR = 2010;
 
 const CAT_COLORS = {
   'Construction / Labour': '#4a7c59', 'Materials & Supplies': '#8aab7e',
@@ -21,10 +28,16 @@ let expenses = [];
 let charts = {};
 let selectedFile = null;
 let isLocalMode = false;
+let isReceiptProcessing = false;
+let lastAutoSaveSignature = '';
+let lastAutoSaveAt = 0;
 
 // ── INIT ────────────────────────────────────────────────────────
 async function startup() {
   try {
+    if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
     const config = getConfig();
     if (!config) {
       const seeded = await loadSeedExpenses();
@@ -84,6 +97,372 @@ function inferCategory(expense) {
 
 function withResolvedCategories(rows) {
   return rows.map(row => ({ ...row, category: inferCategory(row) }));
+}
+
+function normalizeText(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function isLikelyBadProvider(provider) {
+  const value = normalizeText(provider).toLowerCase();
+  if (!value) return true;
+  if (/^x\s*\d+$/i.test(value)) return true;
+  if (/^[\d\W_]+$/.test(value)) return true;
+  if (value.length < 4) return true;
+  const letterCount = (value.match(/[a-z]/g) || []).length;
+  if (letterCount < 3) return true;
+  const digitCount = (value.match(/\d/g) || []).length;
+  if (digitCount > 0 && digitCount >= letterCount) return true;
+  return false;
+}
+
+function isPlausibleExpenseAmount(amount) {
+  return Number.isFinite(amount) && amount > 0 && amount <= MAX_AUTO_PARSED_AMOUNT;
+}
+
+function isPlausibleExpenseDate(isoDate) {
+  if (!isoDate) return false;
+  const parsed = new Date(`${isoDate}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const year = parsed.getFullYear();
+  if (year < MIN_REASONABLE_YEAR) return false;
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return parsed <= tomorrow;
+}
+
+function toIsoDate(value) {
+  if (!value) return null;
+  const input = String(value).trim();
+  let match = input.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+  if (match) {
+    const y = Number(match[1]);
+    const m = Number(match[2]);
+    const d = Number(match[3]);
+    if (y >= 2000 && m >= 1 && m <= 12 && d >= 1 && d <= 31) return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
+  match = input.match(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})\b/);
+  if (match) {
+    const m = Number(match[1]);
+    const d = Number(match[2]);
+    const yRaw = Number(match[3]);
+    const y = yRaw < 100 ? 2000 + yRaw : yRaw;
+    if (y >= 2000 && m >= 1 && m <= 12 && d >= 1 && d <= 31) return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
+  const parsed = new Date(input);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
+function parseAmount(value) {
+  let clean = String(value || '').trim();
+  if (!clean) return null;
+  clean = clean.replace(/\s+/g, '').replace(/\$/g, '');
+
+  if (clean.includes(',') && clean.includes('.')) {
+    clean = clean.replace(/,/g, '');
+  } else if (clean.includes(',') && !clean.includes('.')) {
+    if ((clean.match(/,/g) || []).length === 1 && /,\d{2}$/.test(clean)) {
+      clean = clean.replace(',', '.');
+    } else {
+      clean = clean.replace(/,/g, '');
+    }
+  }
+
+  clean = clean.replace(/[^\d.-]/g, '');
+  if (!clean || (clean.match(/\./g) || []).length > 1) return null;
+
+  const amount = Number.parseFloat(clean);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function parseReceiptFromText(text, fileName = '') {
+  const raw = String(text || '');
+  const normalized = normalizeText(raw);
+  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  const amountRegex = /\$?\s*\d[\d,]*\.\d{2}/g;
+  const candidates = [];
+  for (const line of lines) {
+    const matches = line.match(amountRegex) || [];
+    for (const match of matches) {
+      const amount = parseAmount(match);
+      if (!isPlausibleExpenseAmount(amount)) continue;
+      let score = 0;
+      if (/\b(amount due|balance due|grand total|total due)\b/i.test(line)) score += 5;
+      if (/\btotal\b/i.test(line) && !/\bsub\s*total\b/i.test(line)) score += 3;
+      if (/\bsub\s*total\b/i.test(line)) score -= 1;
+      if (/\b(gst|pst|hst|tax|change)\b/i.test(line)) score -= 2;
+      if (amount >= 10) score += 0.5;
+      candidates.push({ amount, score, line });
+    }
+  }
+  candidates.sort((a, b) => (b.score - a.score) || (b.amount - a.amount));
+  const amount = candidates.length ? candidates[0].amount : null;
+  const amountFromTotalLine = candidates.length && /\btotal\b/i.test(candidates[0].line) && !/\bsub\s*total\b/i.test(candidates[0].line);
+  const subtotalCandidate = candidates.find(c => /\bsub\s*total\b/i.test(c.line));
+  const taxCandidates = candidates.filter(c => /\b(gst|pst|hst|tax)\b/i.test(c.line) && !/\b(total|sub\s*total)\b/i.test(c.line));
+  const taxSum = taxCandidates.reduce((sum, c) => sum + c.amount, 0);
+  let amountLooksSuspicious = false;
+  if (amount && candidates.length >= 3) {
+    const sortedAmounts = candidates.map(c => c.amount).sort((a, b) => a - b);
+    const median = sortedAmounts[Math.floor(sortedAmounts.length / 2)] || 0;
+    if (median > 0 && amount / median >= 4) amountLooksSuspicious = true;
+  }
+  if (amount && subtotalCandidate && taxSum > 0) {
+    const expected = subtotalCandidate.amount + taxSum;
+    if (Math.abs(amount - expected) > Math.max(2, expected * 0.25)) amountLooksSuspicious = true;
+  }
+  const dateCandidates = [
+    ...raw.match(/\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b/g) || [],
+    ...raw.match(/\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b/g) || [],
+    ...raw.match(/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{2,4}\b/gi) || [],
+  ];
+  let isoDate = null;
+  for (const candidate of dateCandidates) {
+    isoDate = toIsoDate(candidate);
+    if (isoDate) break;
+  }
+  if (!isPlausibleExpenseDate(isoDate)) isoDate = null;
+
+  const providerBlacklist = /receipt|invoice|total|subtotal|tax|date|visa|mastercard|debit|credit|hst|gst|pst|thank|change|auth|transaction|approval|item|regular sale/i;
+  let provider = '';
+  let providerScore = -Infinity;
+  for (const line of lines.slice(0, 24)) {
+    if (line.length < 3 || line.length > 70) continue;
+    if (providerBlacklist.test(line)) continue;
+    if (!/[a-zA-Z]/.test(line)) continue;
+    let score = 0;
+    const letterCount = (line.match(/[a-zA-Z]/g) || []).length;
+    const digitCount = (line.match(/\d/g) || []).length;
+    if (letterCount >= 6) score += 2;
+    if (digitCount === 0) score += 2;
+    if (/^[A-Z&.'\-\s]+$/.test(line)) score += 1;
+    if (/\$|\b\d{2,}\b/.test(line)) score -= 2;
+    if (/^x\s*\d+$/i.test(line)) score -= 6;
+    if (score > providerScore) {
+      provider = line;
+      providerScore = score;
+    }
+  }
+  if (isLikelyBadProvider(provider)) provider = '';
+
+  let description = `${provider || 'Receipt'} expense`;
+  if (fileName) description = `${description} (${fileName})`;
+
+  if (!isoDate) isoDate = new Date().toISOString().slice(0, 10);
+
+  const parsed = {
+    provider,
+    amount,
+    date: isoDate,
+    description,
+    category: inferCategory({ provider, description, category: 'Other' }),
+    notes: `Auto-extracted from receipt OCR.${normalized ? ` OCR text: ${normalized.slice(0, 400)}` : ''}`,
+  };
+
+  let confidenceScore = [provider, amount, isoDate].filter(Boolean).length / 3;
+  if (isLikelyBadProvider(provider)) confidenceScore -= 0.5;
+  if (!isPlausibleExpenseAmount(amount)) confidenceScore -= 0.5;
+  if (!isPlausibleExpenseDate(isoDate)) confidenceScore -= 0.25;
+  if (!amountFromTotalLine) confidenceScore -= 0.15;
+  if (amountLooksSuspicious) confidenceScore -= 0.45;
+  confidenceScore = Math.max(0, Math.min(1, confidenceScore));
+  return { parsed, confidenceScore };
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Could not read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function runImageOcr(dataUrl) {
+  if (!window.Tesseract) return '';
+  const result = await window.Tesseract.recognize(dataUrl, 'eng');
+  return result?.data?.text || '';
+}
+
+async function extractPdfText(file) {
+  if (!window.pdfjsLib) return '';
+  const bytes = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+  const maxPages = Math.min(pdf.numPages, 3);
+  let text = '';
+  for (let i = 1; i <= maxPages; i += 1) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += ` ${content.items.map(item => item.str).join(' ')}`;
+  }
+  return normalizeText(text);
+}
+
+async function renderPdfFirstPageToDataUrl(file) {
+  if (!window.pdfjsLib) return '';
+  const bytes = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas.toDataURL('image/png');
+}
+
+async function runAgentReceiptFallback(file, ocrText) {
+  if (!supabaseClient) return null;
+  const dataUrl = await readFileAsDataURL(file);
+  const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+  const { data, error } = await supabaseClient.functions.invoke(AI_RECEIPT_FUNCTION, {
+    body: {
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      fileBase64: base64,
+      ocrText: normalizeText(ocrText).slice(0, 12000),
+    }
+  });
+  if (error) throw error;
+  return data || null;
+}
+
+function applyExtractedExpenseFields(extracted, sourceLabel = 'OCR') {
+  if (!extracted) return false;
+  if (extracted.date) document.getElementById('m-date').value = toIsoDate(extracted.date) || document.getElementById('m-date').value;
+  if (extracted.amount) document.getElementById('m-amount').value = Number(extracted.amount).toFixed(2);
+  if (extracted.provider) document.getElementById('m-provider').value = extracted.provider;
+  if (extracted.description) document.getElementById('m-desc').value = extracted.description;
+  const category = inferCategory({
+    provider: extracted.provider || '',
+    description: extracted.description || '',
+    category: extracted.category || 'Other',
+  });
+  document.getElementById('m-cat').value = category;
+  if (extracted.notes) document.getElementById('m-notes').value = extracted.notes;
+  toast(`${sourceLabel} captured receipt fields`);
+  return true;
+}
+
+function hasMinimumFieldsForAutoSave() {
+  const date = document.getElementById('m-date').value;
+  const amount = parseFloat(document.getElementById('m-amount').value);
+  const provider = document.getElementById('m-provider').value.trim();
+  const desc = document.getElementById('m-desc').value.trim();
+  return Boolean(date && Number.isFinite(amount) && amount > 0 && provider && desc);
+}
+
+function shouldSkipDuplicateAutoSave(file, extracted) {
+  const sig = [
+    file?.name || '',
+    file?.size || 0,
+    file?.lastModified || 0,
+    extracted?.provider || '',
+    extracted?.amount || '',
+    extracted?.date || '',
+  ].join('|');
+  const now = Date.now();
+  const isDuplicate = sig === lastAutoSaveSignature && (now - lastAutoSaveAt) < 45000;
+  if (!isDuplicate) {
+    lastAutoSaveSignature = sig;
+    lastAutoSaveAt = now;
+  }
+  return isDuplicate;
+}
+
+function revealSavedExpense(expense) {
+  if (!expense) return;
+  showTab('expenses');
+  const searchInput = document.getElementById('search-input');
+  if (searchInput && expense.provider) {
+    searchInput.value = expense.provider;
+  }
+  renderTable();
+}
+
+async function processReceiptFile(file) {
+  if (isReceiptProcessing) return;
+  isReceiptProcessing = true;
+  const saveBtn = document.getElementById('save-btn');
+  const priorText = saveBtn.textContent;
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Reading receipt…';
+
+  try {
+    let ocrText = '';
+    if (/pdf/i.test(file.type) || file.name.toLowerCase().endsWith('.pdf')) {
+      ocrText = await extractPdfText(file);
+      if (ocrText.length < OCR_MIN_TEXT_LENGTH) {
+        const pagePreview = await renderPdfFirstPageToDataUrl(file);
+        if (pagePreview) ocrText = await runImageOcr(pagePreview);
+      }
+    } else {
+      const dataUrl = await readFileAsDataURL(file);
+      ocrText = await runImageOcr(dataUrl);
+    }
+
+    const { parsed, confidenceScore } = parseReceiptFromText(ocrText, file.name);
+    let extracted = confidenceScore >= 0.67 ? parsed : null;
+
+    if (!extracted && supabaseClient) {
+      saveBtn.textContent = 'Running AI extraction…';
+      const aiData = await runAgentReceiptFallback(file, ocrText);
+      if (aiData) {
+        extracted = {
+          provider: aiData.provider || '',
+          amount: Number(aiData.amount) || null,
+          date: aiData.date || new Date().toISOString().slice(0, 10),
+          description: aiData.description || `${aiData.provider || 'Receipt'} expense (${file.name})`,
+          category: aiData.category || 'Other',
+          notes: aiData.notes || 'Auto-extracted via AI fallback.',
+        };
+      }
+    }
+
+    if (extracted) {
+      applyExtractedExpenseFields(extracted, confidenceScore >= 0.67 ? 'OCR' : 'AI');
+      if (AUTO_ADD_FROM_RECEIPT && hasMinimumFieldsForAutoSave()) {
+        if (shouldSkipDuplicateAutoSave(file, extracted)) {
+          toast('This receipt was already auto-saved. Skipping duplicate.');
+          return;
+        }
+        toast('Receipt parsed. Auto-saving expense…');
+        await saveExpense({ automated: true });
+      }
+    } else {
+      toast('Could not auto-read this receipt. Please fill manually.', true);
+    }
+  } catch (e) {
+    toast(`Receipt read failed: ${e.message}`, true);
+  } finally {
+    isReceiptProcessing = false;
+    if (saveBtn.textContent !== 'Saving…' && saveBtn.textContent !== 'Uploading…') {
+      saveBtn.disabled = false;
+      saveBtn.textContent = priorText || 'Save Expense';
+    }
+  }
+}
+
+async function notifySpreadsheetEmail(action, expense) {
+  if (!supabaseClient || isLocalMode) return;
+  try {
+    await supabaseClient.functions.invoke(EMAIL_UPDATE_FUNCTION, {
+      body: {
+        action,
+        recipient: UPDATE_EMAIL_RECIPIENT,
+        expenseId: expense?.id || null,
+      }
+    });
+  } catch (e) {
+    console.warn('Email notification failed:', e);
+  }
 }
 
 // ── SETUP ───────────────────────────────────────────────────────
@@ -464,6 +843,7 @@ async function deleteExpense(id) {
     setSyncing(false);
     renderAll();
     toast('Expense deleted');
+    notifySpreadsheetEmail('delete', { id });
   } catch (e) {
     setSyncing(false, true);
     toast('Error: ' + e.message, true);
@@ -534,6 +914,7 @@ function setFile(file) {
   document.getElementById('upload-area').style.display = 'none';
   document.getElementById('upload-preview').style.display = 'block';
   document.getElementById('upload-progress-bar').style.width = '0%';
+  processReceiptFile(file);
 }
 
 function clearFile() {
@@ -570,7 +951,8 @@ document.getElementById('modal-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('modal-overlay')) closeModal();
 });
 
-async function saveExpense() {
+async function saveExpense(options = {}) {
+  const automated = Boolean(options.automated);
   const date = document.getElementById('m-date').value;
   const amount = parseFloat(document.getElementById('m-amount').value);
   const provider = document.getElementById('m-provider').value.trim();
@@ -578,7 +960,10 @@ async function saveExpense() {
   const category = document.getElementById('m-cat').value;
   const notes = document.getElementById('m-notes').value.trim();
 
-  if (!date || !amount || !provider || !desc) { toast('Please fill in all required fields', true); return; }
+  if (!date || !amount || !provider || !desc) {
+    if (!automated) toast('Please fill in all required fields', true);
+    return;
+  }
 
   const btn = document.getElementById('save-btn');
   btn.disabled = true;
@@ -612,7 +997,8 @@ async function saveExpense() {
       setLocalModeSync();
       closeModal();
       renderAll();
-      toast('Expense saved locally ✓');
+      toast(automated ? 'Receipt saved locally ✓' : 'Expense saved locally ✓');
+      if (automated) revealSavedExpense(localExp);
       return;
     }
 
@@ -623,7 +1009,9 @@ async function saveExpense() {
     setSyncing(false);
     closeModal();
     renderAll();
-    toast('Expense saved ✓');
+    toast(automated ? 'Receipt saved ✓' : 'Expense saved ✓');
+    notifySpreadsheetEmail('insert', data);
+    if (automated) revealSavedExpense(data);
   } catch (e) {
     const fallbackExp = {
       id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -644,6 +1032,7 @@ async function saveExpense() {
     closeModal();
     renderAll();
     toast(`Saved locally (sync error: ${e.message})`, true);
+    if (automated) revealSavedExpense(fallbackExp);
   }
 }
 
