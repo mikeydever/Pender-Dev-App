@@ -90,7 +90,7 @@ serve(async (req) => {
   } catch {
     payload = {};
   }
-  const recipient = payload.recipient ?? "michaelwindeyer@gmail.com";
+  const recipient = payload.recipient ?? "michaelwindeyermarketing@gmail.com";
   const action = payload.action ?? "update";
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);

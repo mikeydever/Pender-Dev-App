@@ -9,7 +9,7 @@ const OCR_MIN_TEXT_LENGTH = 30;
 const AUTO_ADD_FROM_RECEIPT = true;
 const AI_RECEIPT_FUNCTION = 'extract-receipt-expense';
 const EMAIL_UPDATE_FUNCTION = 'email-expenses-update';
-const UPDATE_EMAIL_RECIPIENT = 'michaelwindeyer@gmail.com';
+const UPDATE_EMAIL_RECIPIENT = 'michaelwindeyermarketing@gmail.com';
 const MAX_AUTO_PARSED_AMOUNT = 250000;
 const MIN_REASONABLE_YEAR = 2010;
 
