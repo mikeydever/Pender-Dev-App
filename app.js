@@ -3,6 +3,8 @@
 const PASSWORD = 'pender2024';
 const PROPERTY_COST = 500000;
 const CONFIG_KEY = 'pender_supabase_config';
+const DEFAULT_SUPABASE_URL = 'https://ibjocekpexrmpkyuhgtv.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imliam9jZWtwZXhybXBreXVoZ3R2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MzM4NDcsImV4cCI6MjA4ODUwOTg0N30.vtEvHu4q7Bu063VRlIOBNgK6aXIlHXZp94pEm60xNj4';
 const SEED_DATA_PATH = 'expenses_seed.json';
 const LOCAL_EXPENSES_KEY = 'pender_local_expenses';
 const OCR_MIN_TEXT_LENGTH = 30;
@@ -39,7 +41,11 @@ async function startup() {
     if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
-    const config = getConfig();
+    let config = getConfig();
+    if (!config && DEFAULT_SUPABASE_URL && DEFAULT_SUPABASE_KEY) {
+      config = { url: DEFAULT_SUPABASE_URL, key: DEFAULT_SUPABASE_KEY };
+      localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    }
     if (!config) {
       const seeded = await loadSeedExpenses();
       if (seeded.length) {
