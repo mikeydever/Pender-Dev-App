@@ -342,6 +342,12 @@ body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);mi
         <select id="filter-cat" onchange="renderTable()">
           <option value="">All Categories</option>
         </select>
+        <select id="sort-expenses" onchange="renderTable()">
+          <option value="date_desc">Receipt Date (Newest)</option>
+          <option value="date_asc">Receipt Date (Oldest)</option>
+          <option value="added_desc">Recently Added</option>
+          <option value="added_asc">Oldest Added</option>
+        </select>
         <button class="add-btn" onclick="openModal()">+ Add Expense</button>
       </div>
       <div style="overflow-x:auto">
@@ -426,6 +432,6 @@ body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);mi
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=20260308-17"></script>
+<script src="app.js?v=20260308-18"></script>
 </body>
 </html>

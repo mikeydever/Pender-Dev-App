@@ -449,7 +449,7 @@ async function processReceiptFile(file) {
       applyExtractedExpenseFields(extracted, confidenceScore >= 0.67 ? 'OCR' : 'AI');
       if (AUTO_ADD_FROM_RECEIPT && hasMinimumFieldsForAutoSave()) {
         if (shouldSkipDuplicateAutoSave(file, extracted)) {
-          toast('This receipt was already auto-saved. Skipping duplicate.');
+          toast('This expense has already been added.');
           return;
         }
         toast('Receipt parsed. Auto-saving expense…');
@@ -674,6 +674,49 @@ function expenseMergeKey(row) {
   return `${rawDate}|${provider}|${description}|${category}|${year}|${amount}`;
 }
 
+function expenseDedupeKey(row) {
+  const rawDate = String(row.date || '').split('T')[0];
+  const provider = normalizeText(String(row.provider || '').toLowerCase());
+  const description = normalizeText(String(row.description || '').toLowerCase());
+  const amountNum = Number(row.amount);
+  const amount = Number.isFinite(amountNum) ? amountNum.toFixed(2) : '';
+  return `${rawDate}|${provider}|${description}|${amount}`;
+}
+
+function isDuplicateExpense(row) {
+  const key = expenseDedupeKey(row);
+  return expenses.some(e => expenseDedupeKey(e) === key);
+}
+
+function getAddedAtTimestamp(row) {
+  const createdAt = Date.parse(String(row.created_at || ''));
+  if (Number.isFinite(createdAt)) return createdAt;
+
+  const localIdMatch = String(row.id || '').match(/^local-(\d+)-/);
+  if (localIdMatch) {
+    const localTs = Number(localIdMatch[1]);
+    if (Number.isFinite(localTs)) return localTs;
+  }
+
+  const fallbackDate = Date.parse(`${String(row.date || '').split('T')[0]}T12:00:00`);
+  return Number.isFinite(fallbackDate) ? fallbackDate : 0;
+}
+
+function sortExpenses(rows, sortMode) {
+  const list = [...rows];
+  switch (sortMode) {
+    case 'date_asc':
+      return list.sort((a, b) => a.date.localeCompare(b.date));
+    case 'added_desc':
+      return list.sort((a, b) => getAddedAtTimestamp(b) - getAddedAtTimestamp(a));
+    case 'added_asc':
+      return list.sort((a, b) => getAddedAtTimestamp(a) - getAddedAtTimestamp(b));
+    case 'date_desc':
+    default:
+      return list.sort((a, b) => b.date.localeCompare(a.date));
+  }
+}
+
 async function maybeBackfillSupabase(existingRows) {
   const seeded = await loadSeedExpenses();
   if (!seeded.length) return { rows: existingRows, inserted: 0 };
@@ -821,11 +864,13 @@ function renderTable() {
   const search = document.getElementById('search-input').value.toLowerCase();
   const year = document.getElementById('filter-year').value;
   const cat = document.getElementById('filter-cat').value;
+  const sortMode = document.getElementById('sort-expenses')?.value || 'date_desc';
 
   let filtered = expenses.filter(e => {
     const ms = !search || e.provider.toLowerCase().includes(search) || e.description.toLowerCase().includes(search);
     return ms && (!year || String(e.year) === year) && (!cat || e.category === cat);
-  }).sort((a, b) => b.date.localeCompare(a.date));
+  });
+  filtered = sortExpenses(filtered, sortMode);
 
   const tbody = document.getElementById('expense-tbody');
   if (!filtered.length) {
@@ -1011,6 +1056,24 @@ async function saveExpense(options = {}) {
   if (!isLocalMode && supabaseClient) setSyncing(true);
 
   try {
+    const baseExp = {
+      date,
+      amount,
+      provider,
+      description: desc,
+      category,
+      notes,
+      year: parseInt(date.slice(0, 4)),
+    };
+
+    if (isDuplicateExpense(baseExp)) {
+      if (!isLocalMode && supabaseClient) setSyncing(false);
+      btn.disabled = false;
+      btn.textContent = 'Save Expense';
+      toast('This expense has already been added.');
+      return;
+    }
+
     let receipt_url = null;
     let receipt_name = null;
 
@@ -1036,14 +1099,7 @@ async function saveExpense(options = {}) {
       btn.textContent = 'Saving…';
     }
 
-    const newExp = {
-      date, amount, provider,
-      description: desc,
-      category, notes,
-      year: parseInt(date.slice(0, 4)),
-      receipt_url,
-      receipt_name
-    };
+    const newExp = { ...baseExp, receipt_url, receipt_name };
 
     if (isLocalMode || !supabaseClient) {
       const localExp = { ...newExp, id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
@@ -1071,7 +1127,12 @@ async function saveExpense(options = {}) {
     setSyncing(false, true);
     btn.disabled = false;
     btn.textContent = 'Save Expense';
-    toast(`Could not save to live database: ${e.message}`, true);
+    const message = String(e?.message || e || 'unknown error');
+    if (/duplicate key|unique constraint|already exists/i.test(message)) {
+      toast('This expense has already been added.');
+      return;
+    }
+    toast(`Could not save to live database: ${message}`, true);
   }
 }
 
