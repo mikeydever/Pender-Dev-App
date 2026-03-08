@@ -2,3 +2,4 @@
 .playwright-cli/
 supabase/.temp/
 supabase/.env.functions
+.vercel
