@@ -8,6 +8,7 @@ const LOCAL_EXPENSES_KEY = 'pender_local_expenses';
 const OCR_MIN_TEXT_LENGTH = 30;
 const AUTO_ADD_FROM_RECEIPT = true;
 const AI_RECEIPT_FUNCTION = 'extract-receipt-expense';
+const RECEIPT_UPLOAD_FUNCTION = 'upload-receipt';
 const EMAIL_UPDATE_FUNCTION = 'email-expenses-update';
 const UPDATE_EMAIL_RECIPIENT = 'michaelwindeyermarketing@gmail.com';
 const MAX_AUTO_PARSED_AMOUNT = 250000;
@@ -952,6 +953,23 @@ async function uploadReceipt(file) {
   return { url: urlData.publicUrl, name: file.name };
 }
 
+async function uploadReceiptViaEdge(file) {
+  const dataUrl = await readFileAsDataURL(file);
+  const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+  document.getElementById('upload-progress-bar').style.width = '70%';
+  const { data, error } = await supabaseClient.functions.invoke(RECEIPT_UPLOAD_FUNCTION, {
+    body: {
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      fileBase64: base64,
+    }
+  });
+  if (error) throw error;
+  if (!data?.url) throw new Error('Upload fallback returned no URL');
+  document.getElementById('upload-progress-bar').style.width = '100%';
+  return { url: data.url, name: data.name || file.name };
+}
+
 // ── MODAL ───────────────────────────────────────────────────────
 function openModal() {
   document.getElementById('modal-overlay').classList.add('open');
@@ -996,10 +1014,19 @@ async function saveExpense(options = {}) {
         const result = await uploadReceipt(selectedFile);
         receipt_url = result.url;
         receipt_name = result.name;
-      } catch (uploadError) {
-        console.warn('Receipt upload failed:', uploadError);
-        toast(`Receipt upload failed; saving expense without attachment (${uploadError.message})`, true);
+      } catch (uploadErrorDirect) {
+        console.warn('Direct receipt upload failed, trying edge fallback:', uploadErrorDirect);
+        try {
+          const result = await uploadReceiptViaEdge(selectedFile);
+          receipt_url = result.url;
+          receipt_name = result.name;
+          toast('Receipt uploaded via fallback ✓');
+        } catch (uploadErrorFallback) {
+          console.warn('Edge fallback receipt upload failed:', uploadErrorFallback);
+          throw new Error(`Receipt upload failed: ${uploadErrorFallback.message || uploadErrorDirect.message}`);
+        }
       }
+      if (!receipt_url) throw new Error('Receipt upload did not produce a URL');
       btn.textContent = 'Saving…';
     }
 

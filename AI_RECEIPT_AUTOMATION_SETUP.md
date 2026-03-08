@@ -11,6 +11,8 @@ This app now supports:
 - Frontend OCR + auto-add pipeline in `app.js`
 - Edge function fallback:
   - `supabase/functions/extract-receipt-expense/index.ts`
+- Edge function upload fallback:
+  - `supabase/functions/upload-receipt/index.ts`
 - Edge function email sender:
   - `supabase/functions/email-expenses-update/index.ts`
 
@@ -52,8 +54,9 @@ This script will:
 
 1. Link the Supabase project.
 2. Set all required secrets.
-3. Deploy `extract-receipt-expense`.
-4. Deploy `email-expenses-update`.
+3. Deploy `upload-receipt`.
+4. Deploy `extract-receipt-expense`.
+5. Deploy `email-expenses-update`.
 
 ## 4) Test flow
 
@@ -62,7 +65,7 @@ This script will:
 3. Upload a receipt image or PDF.
 4. App runs OCR first. If confidence is low, it calls `extract-receipt-expense`.
 5. If enough fields are detected, expense is auto-saved.
-6. After save/delete, app calls `email-expenses-update`, which sends `michaelwindeyer@gmail.com` a CSV attachment.
+6. After save/delete, app calls `email-expenses-update`, which sends `michaelwindeyermarketing@gmail.com` a CSV attachment.
 
 ## Notes
 

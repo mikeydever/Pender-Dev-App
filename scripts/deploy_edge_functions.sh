@@ -39,6 +39,7 @@ supabase secrets set RESEND_API_KEY="$RESEND_API_KEY"
 supabase secrets set EXPENSE_EMAIL_FROM="$EXPENSE_EMAIL_FROM"
 
 echo "Deploying edge functions"
+supabase functions deploy upload-receipt --no-verify-jwt
 supabase functions deploy extract-receipt-expense --no-verify-jwt
 supabase functions deploy email-expenses-update --no-verify-jwt
 
