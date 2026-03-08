@@ -121,9 +121,13 @@ body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);mi
 .table-toolbar input,.table-toolbar select{padding:8px 14px;border:1.5px solid var(--driftwood);border-radius:8px;
   font-family:'Nunito',sans-serif;font-size:13px;background:var(--paper);color:var(--ink);outline:none;}
 .table-toolbar input:focus,.table-toolbar select:focus{border-color:var(--moss);}
-.add-btn{margin-left:auto;background:var(--forest);color:var(--sand);border:none;border-radius:8px;
+.toolbar-actions{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.add-btn{background:var(--forest);color:var(--sand);border:none;border-radius:8px;
   padding:8px 18px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s;}
 .add-btn:hover{background:var(--moss);}
+.download-btn{background:var(--paper2);color:var(--bark);border:1px solid var(--driftwood);border-radius:8px;
+  padding:8px 14px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s,border-color .2s;}
+.download-btn:hover{background:var(--sand);border-color:var(--bark);}
 .expense-table{width:100%;border-collapse:collapse;}
 .expense-table th{background:var(--paper2);padding:11px 16px;text-align:left;font-size:11px;font-weight:700;
   letter-spacing:.08em;text-transform:uppercase;color:var(--bark);border-bottom:1px solid var(--sand);}
@@ -348,7 +352,10 @@ body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);mi
           <option value="added_desc">Recently Added</option>
           <option value="added_asc">Oldest Added</option>
         </select>
-        <button class="add-btn" onclick="openModal()">+ Add Expense</button>
+        <div class="toolbar-actions">
+          <button class="download-btn" onclick="downloadCurrentCsv()">Download CSV</button>
+          <button class="add-btn" onclick="openModal()">+ Add Expense</button>
+        </div>
       </div>
       <div style="overflow-x:auto">
         <table class="expense-table">
@@ -432,6 +439,6 @@ body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);mi
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=20260308-19"></script>
+<script src="app.js?v=20260308-20"></script>
 </body>
 </html>

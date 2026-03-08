@@ -735,6 +735,52 @@ function sortExpenses(rows, sortMode) {
   }
 }
 
+function getFilteredExpenses() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const year = document.getElementById('filter-year').value;
+  const cat = document.getElementById('filter-cat').value;
+  const sortMode = document.getElementById('sort-expenses')?.value || 'date_desc';
+
+  let filtered = expenses.filter(e => {
+    const ms = !search || e.provider.toLowerCase().includes(search) || e.description.toLowerCase().includes(search);
+    return ms && (!year || String(e.year) === year) && (!cat || e.category === cat);
+  });
+  return sortExpenses(filtered, sortMode);
+}
+
+function escapeCsvCell(value) {
+  const text = String(value ?? '');
+  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function downloadCurrentCsv() {
+  const rows = getFilteredExpenses();
+  if (!rows.length) {
+    toast('No expenses to download in current view', true);
+    return;
+  }
+
+  const headers = ['id', 'created_at', 'date', 'amount', 'provider', 'description', 'category', 'notes', 'year', 'receipt_url', 'receipt_name'];
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    lines.push(headers.map(h => escapeCsvCell(row[h])).join(','));
+  }
+
+  const csv = lines.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  a.href = url;
+  a.download = `pender-expenses-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast(`Downloaded CSV (${rows.length} rows)`);
+}
+
 async function maybeBackfillSupabase(existingRows) {
   const seeded = await loadSeedExpenses();
   if (!seeded.length) return { rows: existingRows, inserted: 0 };
@@ -879,16 +925,7 @@ function drawLine() {
 
 // ── TABLE ───────────────────────────────────────────────────────
 function renderTable() {
-  const search = document.getElementById('search-input').value.toLowerCase();
-  const year = document.getElementById('filter-year').value;
-  const cat = document.getElementById('filter-cat').value;
-  const sortMode = document.getElementById('sort-expenses')?.value || 'date_desc';
-
-  let filtered = expenses.filter(e => {
-    const ms = !search || e.provider.toLowerCase().includes(search) || e.description.toLowerCase().includes(search);
-    return ms && (!year || String(e.year) === year) && (!cat || e.category === cat);
-  });
-  filtered = sortExpenses(filtered, sortMode);
+  const filtered = getFilteredExpenses();
 
   const tbody = document.getElementById('expense-tbody');
   if (!filtered.length) {
