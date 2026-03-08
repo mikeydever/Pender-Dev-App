@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pender Island — Development Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Nunito:wght@300;400;600;700&display=swap');
+:root {
+  --forest:#2d4a3e;--moss:#4a7c59;--sage:#7aaa6e;--sand:#e8dcc8;
+  --bark:#7a5c3a;--driftwood:#c4a882;--sky:#a8c8c4;
+  --paper:#f6f1e8;--paper2:#ede6d5;--ink:#2a2318;
+  --mist:#e0ece6;--rust:#b85a2a;--gold:#a07820;--white:#fdfaf4;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;}
+
+/* LOGIN */
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 20% 80%,rgba(74,124,89,.18) 0%,transparent 55%),
+  radial-gradient(ellipse at 80% 10%,rgba(45,74,62,.15) 0%,transparent 50%),var(--paper);
+  position:relative;overflow:hidden;}
+#login-screen::before{content:'';position:absolute;inset:0;
+  background-image:radial-gradient(circle at 1px 1px,rgba(74,124,89,.06) 1px,transparent 0);
+  background-size:28px 28px;pointer-events:none;}
+.login-card{background:var(--white);border:1px solid rgba(196,168,130,.4);border-radius:20px;
+  padding:52px 48px 44px;width:400px;max-width:95vw;
+  box-shadow:0 8px 48px rgba(45,74,62,.12),0 2px 12px rgba(45,74,62,.08);
+  position:relative;z-index:1;text-align:center;}
+.login-leaf{font-size:52px;margin-bottom:8px;display:block;filter:drop-shadow(0 2px 8px rgba(74,124,89,.3));}
+.login-card h1{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:var(--forest);margin-bottom:4px;}
+.login-card .subtitle{font-size:13px;color:var(--bark);margin-bottom:32px;letter-spacing:.02em;}
+.login-card input{width:100%;padding:14px 18px;border:1.5px solid var(--driftwood);border-radius:10px;
+  font-family:'Nunito',sans-serif;font-size:15px;background:var(--paper);color:var(--ink);outline:none;
+  transition:border-color .2s,box-shadow .2s;letter-spacing:3px;text-align:center;margin-bottom:16px;}
+.login-card input:focus{border-color:var(--moss);box-shadow:0 0 0 3px rgba(74,124,89,.12);}
+.login-btn{width:100%;padding:14px;background:var(--forest);color:var(--sand);border:none;
+  border-radius:10px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;cursor:pointer;
+  transition:background .2s,transform .1s;letter-spacing:.05em;}
+.login-btn:hover{background:var(--moss);}
+.login-btn:active{transform:scale(.98);}
+.login-error{color:var(--rust);font-size:13px;margin-top:10px;min-height:18px;}
+.login-hint{font-size:12px;color:var(--driftwood);margin-top:20px;}
+
+/* APP */
+#app{display:none;}
+.topbar{background:var(--forest);padding:0 32px;display:flex;align-items:center;
+  justify-content:space-between;height:64px;position:sticky;top:0;z-index:100;
+  box-shadow:0 2px 12px rgba(0,0,0,.15);}
+.topbar-left{display:flex;align-items:center;gap:12px;}
+.topbar-logo{font-size:28px;}
+.topbar-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:var(--sand);}
+.topbar-sub{font-size:11px;color:var(--sage);letter-spacing:.08em;text-transform:uppercase;margin-top:1px;}
+.lock-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;
+  color:var(--sand);padding:7px 14px;font-family:'Nunito',sans-serif;font-size:13px;cursor:pointer;transition:background .2s;}
+.lock-btn:hover{background:rgba(255,255,255,.15);}
+.navtabs{background:var(--white);border-bottom:2px solid var(--sand);display:flex;padding:0 32px;overflow-x:auto;}
+.navtab{padding:14px 22px;font-size:14px;font-weight:600;color:var(--bark);cursor:pointer;
+  border-bottom:3px solid transparent;margin-bottom:-2px;transition:color .2s,border-color .2s;white-space:nowrap;}
+.navtab:hover{color:var(--moss);}
+.navtab.active{color:var(--forest);border-bottom-color:var(--moss);}
+
+.content{padding:32px;max-width:1300px;margin:0 auto;}
+
+/* BANNER */
+.total-banner{background:linear-gradient(135deg,var(--forest) 0%,#3a6b50 100%);border-radius:16px;
+  padding:28px 32px;color:var(--sand);margin-bottom:28px;display:flex;align-items:center;
+  justify-content:space-between;flex-wrap:wrap;gap:20px;box-shadow:0 4px 24px rgba(45,74,62,.25);}
+.total-banner-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:6px;}
+.total-banner-value{font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:700;line-height:1;}
+.total-banner-value.big{font-size:48px;color:#f0e0c0;}
+.divider-line{width:1px;height:60px;background:rgba(255,255,255,.2);}
+
+/* CARDS */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:32px;}
+.card{background:var(--white);border:1px solid rgba(196,168,130,.35);border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(45,74,62,.06);}
+.card-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--bark);margin-bottom:8px;}
+.card-value{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:700;color:var(--forest);line-height:1;}
+.card-value.highlight{color:var(--rust);}
+.card-sub{font-size:12px;color:var(--driftwood);margin-top:6px;}
+.section-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:var(--forest);
+  margin-bottom:16px;display:flex;align-items:center;gap:10px;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--sand);}
+
+/* CHARTS */
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:32px;}
+@media(max-width:900px){.charts-row{grid-template-columns:1fr;}}
+.chart-card{background:var(--white);border:1px solid rgba(196,168,130,.35);border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(45,74,62,.06);}
+.chart-title{font-size:13px;font-weight:700;color:var(--forest);letter-spacing:.06em;text-transform:uppercase;margin-bottom:16px;}
+.chart-wrap{position:relative;height:260px;}
+
+/* TABLE */
+.table-card{background:var(--white);border:1px solid rgba(196,168,130,.35);border-radius:16px;box-shadow:0 2px 12px rgba(45,74,62,.06);overflow:hidden;margin-bottom:32px;}
+.table-toolbar{padding:18px 24px;border-bottom:1px solid var(--sand);display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.table-toolbar input,.table-toolbar select{padding:8px 14px;border:1.5px solid var(--driftwood);border-radius:8px;
+  font-family:'Nunito',sans-serif;font-size:13px;background:var(--paper);color:var(--ink);outline:none;}
+.table-toolbar input:focus,.table-toolbar select:focus{border-color:var(--moss);}
+.add-btn{margin-left:auto;background:var(--forest);color:var(--sand);border:none;border-radius:8px;
+  padding:8px 18px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s;}
+.add-btn:hover{background:var(--moss);}
+.expense-table{width:100%;border-collapse:collapse;}
+.expense-table th{background:var(--paper2);padding:11px 16px;text-align:left;font-size:11px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--bark);border-bottom:1px solid var(--sand);}
+.expense-table td{padding:12px 16px;font-size:14px;border-bottom:1px solid rgba(232,220,200,.5);vertical-align:middle;}
+.expense-table tr:last-child td{border-bottom:none;}
+.expense-table tr:hover td{background:rgba(232,220,200,.25);}
+.amount-cell{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;color:var(--forest);}
+.category-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.04em;}
+.delete-btn{background:none;border:none;cursor:pointer;color:var(--driftwood);font-size:16px;padding:4px 8px;border-radius:6px;transition:color .2s,background .2s;}
+.delete-btn:hover{color:var(--rust);background:rgba(184,90,42,.08);}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(45,74,62,.45);z-index:200;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--white);border-radius:20px;padding:36px 40px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 16px 64px rgba(0,0,0,.2);}
+.modal h2{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;color:var(--forest);margin-bottom:24px;}
+.form-group{margin-bottom:18px;}
+.form-group label{display:block;font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--bark);margin-bottom:6px;}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid var(--driftwood);
+  border-radius:9px;font-family:'Nunito',sans-serif;font-size:14px;background:var(--paper);color:var(--ink);outline:none;transition:border-color .2s;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--moss);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.modal-actions{display:flex;gap:12px;margin-top:24px;}
+.modal-actions button{flex:1;padding:12px;border-radius:9px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:background .2s;}
+.modal-cancel{background:var(--paper2);border:1px solid var(--driftwood);color:var(--bark);}
+.modal-cancel:hover{background:var(--sand);}
+.modal-save{background:var(--forest);border:none;color:var(--sand);}
+.modal-save:hover{background:var(--moss);}
+
+/* PROVIDER */
+.provider-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;}
+.provider-card{background:var(--white);border:1px solid rgba(196,168,130,.35);border-radius:14px;padding:22px;box-shadow:0 2px 10px rgba(45,74,62,.05);}
+.provider-name{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:700;color:var(--forest);margin-bottom:4px;}
+.provider-total{font-size:22px;font-weight:700;color:var(--moss);font-family:'Cormorant Garamond',serif;margin-bottom:10px;}
+.provider-bar-wrap{height:6px;background:var(--sand);border-radius:3px;margin-bottom:8px;}
+.provider-bar{height:100%;border-radius:3px;background:var(--moss);transition:width .6s ease;}
+.provider-count{font-size:12px;color:var(--driftwood);}
+.year-chart-card{background:var(--white);border:1px solid rgba(196,168,130,.35);border-radius:16px;padding:28px;box-shadow:0 2px 12px rgba(45,74,62,.06);margin-bottom:28px;}
+.year-chart-wrap{position:relative;height:300px;}
+
+@media(max-width:600px){.topbar{padding:0 16px;}.content{padding:16px;}.navtabs{padding:0 12px;}.divider-line{display:none;}}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <span class="login-leaf">🌿</span>
+    <h1>Pender Island</h1>
+    <p class="subtitle">Property Development Tracker</p>
+    <input type="password" id="pw-input" placeholder="Enter password" />
+    <button class="login-btn" onclick="tryLogin()">Unlock</button>
+    <div class="login-error" id="login-error"></div>
+    <p class="login-hint">Private family access · Data stored locally on this device</p>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="topbar-logo">🌲</span>
+      <div>
+        <div class="topbar-title">Pender Island</div>
+        <div class="topbar-sub">Property Development</div>
+      </div>
+    </div>
+    <div>
+      <button class="lock-btn" onclick="logout()">🔒 Lock</button>
+    </div>
+  </div>
+
+  <div class="navtabs">
+    <div class="navtab active" onclick="showTab('dashboard')">Dashboard</div>
+    <div class="navtab" onclick="showTab('expenses')">All Expenses</div>
+    <div class="navtab" onclick="showTab('providers')">By Provider</div>
+    <div class="navtab" onclick="showTab('yearly')">By Year</div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="tab-dashboard" class="content">
+    <div class="total-banner">
+      <div>
+        <div class="total-banner-label">Property Purchase</div>
+        <div class="total-banner-value">$500,000</div>
+      </div>
+      <div class="divider-line"></div>
+      <div>
+        <div class="total-banner-label">Development Costs</div>
+        <div class="total-banner-value" id="banner-dev-cost">—</div>
+      </div>
+      <div class="divider-line"></div>
+      <div>
+        <div class="total-banner-label">Total Investment</div>
+        <div class="total-banner-value big" id="banner-total">—</div>
+      </div>
+    </div>
+
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-label">Total Development Spend</div>
+        <div class="card-value highlight" id="kpi-total">—</div>
+        <div class="card-sub">Above property purchase price</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Number of Transactions</div>
+        <div class="card-value" id="kpi-count">—</div>
+        <div class="card-sub">Recorded expenses</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Top Provider</div>
+        <div class="card-value" style="font-size:18px;line-height:1.2" id="kpi-top-provider">—</div>
+        <div class="card-sub" id="kpi-top-provider-amount">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Largest Category</div>
+        <div class="card-value" style="font-size:18px;line-height:1.2" id="kpi-top-cat">—</div>
+        <div class="card-sub" id="kpi-top-cat-amount">—</div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="chart-title">Spend by Provider (Top 8)</div>
+        <div class="chart-wrap"><canvas id="chart-provider"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Spend by Category</div>
+        <div class="chart-wrap"><canvas id="chart-category"></canvas></div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="chart-card" style="grid-column:1/-1">
+        <div class="chart-title">Monthly Spend — All Years</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="chart-monthly"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPENSES -->
+  <div id="tab-expenses" class="content" style="display:none">
+    <div class="table-card">
+      <div class="table-toolbar">
+        <input type="text" id="search-input" placeholder="🔍  Search provider or description…" style="width:240px" oninput="renderTable()">
+        <select id="filter-year" onchange="renderTable()">
+          <option value="">All Years</option>
+          <option value="2024">2024</option>
+          <option value="2025">2025</option>
+          <option value="2026">2026</option>
+        </select>
+        <select id="filter-cat" onchange="renderTable()">
+          <option value="">All Categories</option>
+        </select>
+        <button class="add-btn" onclick="openModal()">+ Add Expense</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="expense-table">
+          <thead>
+            <tr>
+              <th>Date</th><th>Provider</th><th>Description</th><th>Category</th><th>Amount</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="expense-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROVIDERS -->
+  <div id="tab-providers" class="content" style="display:none">
+    <div class="section-title">Spend by Provider</div>
+    <div class="provider-grid" id="provider-grid"></div>
+  </div>
+
+  <!-- YEARLY -->
+  <div id="tab-yearly" class="content" style="display:none">
+    <div class="section-title">Annual Summary</div>
+    <div class="cards-grid" id="yearly-cards"></div>
+    <div class="year-chart-card">
+      <div class="chart-title" style="font-size:13px;font-weight:700;color:var(--forest);letter-spacing:.06em;text-transform:uppercase;margin-bottom:16px;">Year-over-Year Comparison</div>
+      <div class="year-chart-wrap"><canvas id="chart-yearly"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h2>Add Expense</h2>
+    <div class="form-row">
+      <div class="form-group"><label>Date</label><input type="date" id="m-date"></div>
+      <div class="form-group"><label>Amount ($)</label><input type="number" id="m-amount" placeholder="0.00" step="0.01"></div>
+    </div>
+    <div class="form-group"><label>Provider / Vendor</label><input type="text" id="m-provider" placeholder="e.g. RKR Holdings Ltd."></div>
+    <div class="form-group"><label>Description</label><input type="text" id="m-desc" placeholder="What was done?"></div>
+    <div class="form-group">
+      <label>Category</label>
+      <select id="m-cat">
+        <option>Construction / Labour</option>
+        <option>Materials &amp; Supplies</option>
+        <option>Permits &amp; Legal</option>
+        <option>Professional Services</option>
+        <option>Landscaping</option>
+        <option>Utilities &amp; Site Setup</option>
+        <option>Transportation</option>
+        <option>Accommodation</option>
+        <option>Taxes &amp; Fees</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Notes (optional)</label><textarea id="m-notes" rows="2" placeholder="Any extra details…"></textarea></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-save" onclick="saveExpense()">Save Expense</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PASSWORD = 'pender2024';
+const PROPERTY_COST = 500000;
+const STORAGE_KEY = 'pender_expenses_v2';
+
+const CAT_COLORS = {
+  'Construction / Labour':'#4a7c59','Materials & Supplies':'#8aab7e',
+  'Permits & Legal':'#7a5c3a','Professional Services':'#a07820',
+  'Landscaping':'#2d4a3e','Utilities & Site Setup':'#a8c8c4',
+  'Transportation':'#c4a882','Accommodation':'#b8860b',
+  'Taxes & Fees':'#b85a2a','Other':'#888',
+};
+const PCOLS = ['#2d4a3e','#4a7c59','#7a5c3a','#a07820','#b85a2a','#8aab7e','#a8c8c4','#c4a882','#666','#999','#bbb'];
+
+const SEED = [
+  {id:'s1',date:'2024-01-01',provider:'Land Tax',desc:'Annual property land tax',category:'Taxes & Fees',amount:2459.66,year:2024},
+  {id:'s2',date:'2024-02-01',provider:'BC Ferries',desc:'Ferry costs — February',category:'Transportation',amount:164.85,year:2024},
+  {id:'s3',date:'2024-02-01',provider:'Gas',desc:'Fuel costs — February',category:'Transportation',amount:96.68,year:2024},
+  {id:'s4',date:'2024-03-01',provider:'Gas',desc:'Fuel costs — March',category:'Transportation',amount:121.95,year:2024},
+  {id:'s5',date:'2024-04-01',provider:'BC Ferries',desc:'Ferry costs — April',category:'Transportation',amount:170.00,year:2024},
+  {id:'s6',date:'2024-05-01',provider:'BC Ferries',desc:'Ferry costs — May',category:'Transportation',amount:82.60,year:2024},
+  {id:'s7',date:'2024-05-01',provider:'Gas',desc:'Fuel costs — May',category:'Transportation',amount:103.01,year:2024},
+  {id:'s8',date:'2024-07-01',provider:'BC Ferries',desc:'Ferry costs — July',category:'Transportation',amount:163.85,year:2024},
+  {id:'s9',date:'2024-09-01',provider:'Bradley, Michael',desc:'Professional services — September',category:'Professional Services',amount:9500.00,year:2024},
+  {id:'s10',date:'2024-09-01',provider:'BC Ferries',desc:'Ferry costs — September',category:'Transportation',amount:175.50,year:2024},
+  {id:'s11',date:'2024-09-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — September',category:'Construction / Labour',amount:1903.13,year:2024},
+  {id:'s12',date:'2024-10-01',provider:'BC Ferries',desc:'Ferry costs — October',category:'Transportation',amount:137.67,year:2024},
+  {id:'s13',date:'2024-10-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — October',category:'Construction / Labour',amount:5118.75,year:2024},
+  {id:'s14',date:'2024-11-01',provider:'BC Ferries',desc:'Ferry costs — November',category:'Transportation',amount:112.70,year:2024},
+  {id:'s15',date:'2024-11-01',provider:'Courier',desc:'Courier / shipping — November',category:'Other',amount:23.37,year:2024},
+  {id:'s16',date:'2024-11-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — November',category:'Construction / Labour',amount:5643.75,year:2024},
+  {id:'s17',date:'2024-12-01',provider:'BC Ferries',desc:'Ferry costs — December',category:'Transportation',amount:152.00,year:2024},
+  {id:'s18',date:'2024-12-01',provider:'Courier',desc:'Courier / shipping — December',category:'Other',amount:24.25,year:2024},
+  {id:'s19',date:'2024-12-01',provider:'Court Services',desc:'Court services filing fee',category:'Permits & Legal',amount:64.00,year:2024},
+  {id:'s20',date:'2024-12-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — December (1)',category:'Construction / Labour',amount:9515.63,year:2024},
+  {id:'s21',date:'2024-12-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — December (2)',category:'Construction / Labour',amount:4331.25,year:2024},
+  {id:'s22',date:'2024-12-01',provider:'RKR Holdings Ltd.',desc:'Construction carryover — December',category:'Construction / Labour',amount:13846.88,year:2024},
+  {id:'s23',date:'2024-12-01',provider:'Windridge Living Ltd.',desc:'Milling work — December',category:'Materials & Supplies',amount:7490.70,year:2024},
+  {id:'s24',date:'2025-01-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — Jan (1)',category:'Construction / Labour',amount:5184.38,year:2025},
+  {id:'s25',date:'2025-01-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — Jan (2)',category:'Construction / Labour',amount:3478.13,year:2025},
+  {id:'s26',date:'2025-01-01',provider:'Titan Machinery Corp.',desc:'Equipment / machinery purchase',category:'Utilities & Site Setup',amount:35700.00,year:2025},
+  {id:'s27',date:'2025-01-01',provider:'Titan Machinery Corp.',desc:'Equipment taxes / fees',category:'Taxes & Fees',amount:4284.00,year:2025},
+  {id:'s28',date:'2025-01-01',provider:'BC Ferries',desc:'Ferry costs — January',category:'Transportation',amount:155.25,year:2025},
+  {id:'s29',date:'2025-01-01',provider:'Court Services',desc:'Court services — January',category:'Permits & Legal',amount:20.00,year:2025},
+  {id:'s30',date:'2025-02-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — Feb (1)',category:'Construction / Labour',amount:6496.88,year:2025},
+  {id:'s31',date:'2025-02-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — Feb (2)',category:'Construction / Labour',amount:4790.63,year:2025},
+  {id:'s32',date:'2025-02-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — Feb (3)',category:'Construction / Labour',amount:5381.25,year:2025},
+  {id:'s33',date:'2025-02-01',provider:'Windridge Living Ltd.',desc:'Milling — February (1)',category:'Materials & Supplies',amount:7987.12,year:2025},
+  {id:'s34',date:'2025-02-01',provider:'Windridge Living Ltd.',desc:'Milling — February (2)',category:'Materials & Supplies',amount:6500.55,year:2025},
+  {id:'s35',date:'2025-02-01',provider:'Accommodations',desc:'Worker accommodation — February',category:'Accommodation',amount:500.00,year:2025},
+  {id:'s36',date:'2025-02-01',provider:'Rent (Workers)',desc:'Rent for worker accommodation — February',category:'Accommodation',amount:500.00,year:2025},
+  {id:'s37',date:'2025-02-01',provider:'Court Services',desc:'Court services — February',category:'Permits & Legal',amount:12.00,year:2025},
+  {id:'s38',date:'2025-03-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — March',category:'Construction / Labour',amount:4987.50,year:2025},
+  {id:'s39',date:'2025-03-01',provider:'Windridge Living Ltd.',desc:'Milling — March',category:'Materials & Supplies',amount:8852.85,year:2025},
+  {id:'s40',date:'2025-03-01',provider:'BC Ferries',desc:'Ferry costs — March',category:'Transportation',amount:135.60,year:2025},
+  {id:'s41',date:'2025-03-01',provider:'Accommodations',desc:'Worker accommodation — March',category:'Accommodation',amount:500.00,year:2025},
+  {id:'s42',date:'2025-03-01',provider:'Rent (Workers)',desc:'Rent for workers — March',category:'Accommodation',amount:500.00,year:2025},
+  {id:'s43',date:'2025-04-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — April (1)',category:'Construction / Labour',amount:229.94,year:2025},
+  {id:'s44',date:'2025-04-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — April (2)',category:'Construction / Labour',amount:1312.50,year:2025},
+  {id:'s45',date:'2025-04-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — April (3)',category:'Construction / Labour',amount:3609.38,year:2025},
+  {id:'s46',date:'2025-04-01',provider:'Windridge Living Ltd.',desc:'Milling — April (1)',category:'Materials & Supplies',amount:1113.91,year:2025},
+  {id:'s47',date:'2025-04-01',provider:'Windridge Living Ltd.',desc:'Milling — April (2)',category:'Materials & Supplies',amount:9616.88,year:2025},
+  {id:'s48',date:'2025-04-01',provider:'Windridge Living Ltd.',desc:'Milling — April (3)',category:'Materials & Supplies',amount:6829.25,year:2025},
+  {id:'s49',date:'2025-04-01',provider:'BC Ferries',desc:'Ferry costs — April',category:'Transportation',amount:135.35,year:2025},
+  {id:'s50',date:'2025-04-01',provider:'PI Heating & Plumbing',desc:'Heating & plumbing work',category:'Utilities & Site Setup',amount:241.50,year:2025},
+  {id:'s51',date:'2025-04-01',provider:'Rent (Workers)',desc:'Rent for workers — April',category:'Accommodation',amount:750.00,year:2025},
+  {id:'s52',date:'2025-04-01',provider:'Accommodations',desc:'Worker accommodation — April',category:'Accommodation',amount:250.00,year:2025},
+  {id:'s53',date:'2025-05-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — May (1)',category:'Construction / Labour',amount:2231.25,year:2025},
+  {id:'s54',date:'2025-05-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — May (2)',category:'Construction / Labour',amount:666.66,year:2025},
+  {id:'s55',date:'2025-05-01',provider:'Windridge Living Ltd.',desc:'Milling — May (1)',category:'Materials & Supplies',amount:5997.43,year:2025},
+  {id:'s56',date:'2025-05-01',provider:'Windridge Living Ltd.',desc:'Milling — May (2)',category:'Materials & Supplies',amount:9000.00,year:2025},
+  {id:'s57',date:'2025-05-01',provider:'Windridge Living Ltd.',desc:'Milling — May (3)',category:'Materials & Supplies',amount:6923.13,year:2025},
+  {id:'s58',date:'2025-05-01',provider:'Dag Interior Design',desc:'Interior design services',category:'Professional Services',amount:9178.10,year:2025},
+  {id:'s59',date:'2025-06-01',provider:'BC Ferries',desc:'Ferry costs — June',category:'Transportation',amount:382.20,year:2025},
+  {id:'s60',date:'2025-06-01',provider:'Tax',desc:'Tax payment — June',category:'Taxes & Fees',amount:2027.42,year:2025},
+  {id:'s61',date:'2025-07-01',provider:'BC Ferries',desc:'Ferry costs — July',category:'Transportation',amount:255.00,year:2025},
+  {id:'s62',date:'2025-08-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — August',category:'Construction / Labour',amount:3018.75,year:2025},
+  {id:'s63',date:'2025-10-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — October (1)',category:'Construction / Labour',amount:4396.88,year:2025},
+  {id:'s64',date:'2025-10-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — October (2)',category:'Construction / Labour',amount:5906.25,year:2025},
+  {id:'s65',date:'2025-10-01',provider:'Element Water Testing',desc:'Water testing services',category:'Utilities & Site Setup',amount:315.77,year:2025},
+  {id:'s66',date:'2025-10-01',provider:'Home Show',desc:'Home show attendance',category:'Other',amount:29.00,year:2025},
+  {id:'s67',date:'2025-11-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — November (1)',category:'Construction / Labour',amount:4462.50,year:2025},
+  {id:'s68',date:'2025-11-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — November (2)',category:'Construction / Labour',amount:5315.63,year:2025},
+  {id:'s69',date:'2025-11-01',provider:'BC Ferries',desc:'Ferry costs — November',category:'Transportation',amount:169.60,year:2025},
+  {id:'s70',date:'2025-11-01',provider:'Land Title Survey Auth.',desc:'Land title survey authority fee',category:'Permits & Legal',amount:20.07,year:2025},
+  {id:'s71',date:'2025-12-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — December (1)',category:'Construction / Labour',amount:4856.25,year:2025},
+  {id:'s72',date:'2025-12-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — December (2)',category:'Construction / Labour',amount:7546.88,year:2025},
+  {id:'s73',date:'2025-12-01',provider:'Windridge Living Ltd.',desc:'Milling — December (1)',category:'Materials & Supplies',amount:1080.00,year:2025},
+  {id:'s74',date:'2025-12-01',provider:'Windridge Living Ltd.',desc:'Milling — December (2)',category:'Materials & Supplies',amount:1695.00,year:2025},
+  {id:'s75',date:'2025-12-01',provider:'Windridge Living Ltd.',desc:'Milling — December (3)',category:'Materials & Supplies',amount:22638.44,year:2025},
+  {id:'s76',date:'2026-01-01',provider:'BC Ferries',desc:'Ferry costs — January 2026',category:'Transportation',amount:54.60,year:2026},
+  {id:'s77',date:'2026-01-01',provider:'Camera',desc:'Camera / equipment purchase',category:'Other',amount:41.43,year:2026},
+  {id:'s78',date:'2026-01-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — Jan 2026 (1)',category:'Construction / Labour',amount:7284.38,year:2026},
+  {id:'s79',date:'2026-01-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — Jan 2026 (2)',category:'Construction / Labour',amount:6365.63,year:2026},
+  {id:'s80',date:'2026-01-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — Jan 2026 (3)',category:'Construction / Labour',amount:5971.88,year:2026},
+  {id:'s81',date:'2026-01-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — Jan 2026 (4)',category:'Construction / Labour',amount:4790.63,year:2026},
+  {id:'s82',date:'2026-01-01',provider:'Windridge Living Ltd.',desc:'Milling — January 2026 (1)',category:'Materials & Supplies',amount:7737.63,year:2026},
+  {id:'s83',date:'2026-01-01',provider:'Windridge Living Ltd.',desc:'Milling — January 2026 (2)',category:'Materials & Supplies',amount:7090.58,year:2026},
+  {id:'s84',date:'2026-01-01',provider:'Windridge Living Ltd.',desc:'Milling — January 2026 (3)',category:'Materials & Supplies',amount:14828.21,year:2026},
+  {id:'s85',date:'2026-02-01',provider:'RKR Holdings Ltd.',desc:'Construction labour — Feb 2026',category:'Construction / Labour',amount:4462.50,year:2026},
+  {id:'s86',date:'2026-02-01',provider:'Windridge Living Ltd.',desc:'Milling — February 2026 (1)',category:'Materials & Supplies',amount:7450.05,year:2026},
+  {id:'s87',date:'2026-02-01',provider:'Windridge Living Ltd.',desc:'Milling — February 2026 (2)',category:'Materials & Supplies',amount:5053.13,year:2026},
+];
+
+let expenses = [];
+let charts = {};
+
+function tryLogin() {
+  const v = document.getElementById('pw-input').value;
+  if (v === PASSWORD) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadData(); initApp();
+  } else {
+    document.getElementById('login-error').textContent = 'Incorrect password. Please try again.';
+    document.getElementById('pw-input').value = '';
+  }
+}
+document.getElementById('pw-input').addEventListener('keydown', e => { if(e.key==='Enter') tryLogin(); });
+
+function logout() {
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('pw-input').value='';
+  document.getElementById('login-error').textContent='';
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    expenses = raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(SEED));
+    if (!raw) saveData();
+  } catch(e) { expenses = JSON.parse(JSON.stringify(SEED)); }
+}
+function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses)); }
+
+function fmt(n) {
+  return '$' + Number(n).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function initApp() {
+  populateCategoryFilter();
+  renderDashboard();
+  renderTable();
+  renderProviders();
+  renderYearly();
+}
+
+function populateCategoryFilter() {
+  const sel = document.getElementById('filter-cat');
+  [...new Set(expenses.map(e=>e.category))].sort().forEach(c=>{
+    const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o);
+  });
+}
+
+function showTab(name) {
+  ['dashboard','expenses','providers','yearly'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display = t===name?'block':'none';
+  });
+  document.querySelectorAll('.navtab').forEach((el,i)=>{
+    el.classList.toggle('active',['dashboard','expenses','providers','yearly'][i]===name);
+  });
+}
+
+function groupBy(arr,key) {
+  return arr.reduce((acc,item)=>{ const k=item[key]||'Unknown'; if(!acc[k])acc[k]=[]; acc[k].push(item); return acc; },{});
+}
+
+function renderDashboard() {
+  const total = expenses.reduce((s,e)=>s+Number(e.amount),0);
+  document.getElementById('banner-dev-cost').textContent = fmt(total);
+  document.getElementById('banner-total').textContent = fmt(total+PROPERTY_COST);
+  document.getElementById('kpi-total').textContent = fmt(total);
+  document.getElementById('kpi-count').textContent = expenses.length;
+
+  const provT = Object.entries(groupBy(expenses,'provider'))
+    .map(([k,v])=>({name:k,total:v.reduce((s,e)=>s+Number(e.amount),0)}))
+    .sort((a,b)=>b.total-a.total);
+  if(provT.length){
+    document.getElementById('kpi-top-provider').textContent=provT[0].name;
+    document.getElementById('kpi-top-provider-amount').textContent=fmt(provT[0].total)+' total';
+  }
+  const catT = Object.entries(groupBy(expenses,'category'))
+    .map(([k,v])=>({name:k,total:v.reduce((s,e)=>s+Number(e.amount),0)}))
+    .sort((a,b)=>b.total-a.total);
+  if(catT.length){
+    document.getElementById('kpi-top-cat').textContent=catT[0].name;
+    document.getElementById('kpi-top-cat-amount').textContent=fmt(catT[0].total)+' total';
+  }
+
+  drawBar('chart-provider',provT.slice(0,8).map(d=>d.name.length>18?d.name.slice(0,16)+'…':d.name),
+    provT.slice(0,8).map(d=>d.total), provT.slice(0,8).map((_,i)=>PCOLS[i%PCOLS.length]));
+  drawDoughnut('chart-category',catT.map(d=>d.name),catT.map(d=>d.total),catT.map(d=>CAT_COLORS[d.name]||'#888'));
+  drawLine();
+}
+
+function drawBar(id,labels,data,colors) {
+  if(charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id).getContext('2d'),{
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmt(c.raw)}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{family:'Nunito',size:11},color:'#7a5c3a'}},
+        y:{grid:{color:'rgba(196,168,130,.2)'},ticks:{callback:v=>'$'+Math.round(v/1000)+'k',font:{family:'Nunito',size:11},color:'#7a5c3a'}}
+      }}
+  });
+}
+
+function drawDoughnut(id,labels,data,colors) {
+  if(charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id).getContext('2d'),{
+    type:'doughnut',
+    data:{labels,datasets:[{data,backgroundColor:colors,borderWidth:2,borderColor:'#fdfaf4',hoverOffset:8}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'right',labels:{font:{family:'Nunito',size:11},color:'#2a2318',boxWidth:14,padding:10}},
+        tooltip:{callbacks:{label:c=>' '+c.label+': '+fmt(c.raw)}}}}
+  });
+}
+
+function drawLine() {
+  if(charts['monthly']) charts['monthly'].destroy();
+  const byM={};
+  [...expenses].sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>{
+    const k=e.date.slice(0,7); byM[k]=(byM[k]||0)+Number(e.amount);
+  });
+  const keys=Object.keys(byM).sort();
+  const labels=keys.map(k=>{ const[y,m]=k.split('-'); return new Date(y,m-1).toLocaleString('en-CA',{month:'short',year:'2-digit'}); });
+  const ctx=document.getElementById('chart-monthly').getContext('2d');
+  const grad=ctx.createLinearGradient(0,0,0,200);
+  grad.addColorStop(0,'rgba(74,124,89,.3)'); grad.addColorStop(1,'rgba(74,124,89,.02)');
+  charts['monthly']=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[{data:keys.map(k=>byM[k]),borderColor:'#4a7c59',backgroundColor:grad,fill:true,tension:.4,pointBackgroundColor:'#2d4a3e',pointRadius:4,pointHoverRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmt(c.raw)}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{family:'Nunito',size:11},color:'#7a5c3a'}},
+        y:{grid:{color:'rgba(196,168,130,.2)'},ticks:{callback:v=>'$'+Math.round(v/1000)+'k',font:{family:'Nunito',size:11},color:'#7a5c3a'}}
+      }}
+  });
+}
+
+function renderTable() {
+  const search=document.getElementById('search-input').value.toLowerCase();
+  const year=document.getElementById('filter-year').value;
+  const cat=document.getElementById('filter-cat').value;
+  let filtered=expenses.filter(e=>{
+    const ms=!search||e.provider.toLowerCase().includes(search)||e.desc.toLowerCase().includes(search);
+    return ms&&(!year||String(e.year)===year)&&(!cat||e.category===cat);
+  }).sort((a,b)=>b.date.localeCompare(a.date));
+  const tbody=document.getElementById('expense-tbody');
+  if(!filtered.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--driftwood)">No expenses found</td></tr>'; return;
+  }
+  tbody.innerHTML=filtered.map(e=>{
+    const col=CAT_COLORS[e.category]||'#888';
+    const d=new Date(e.date+'T12:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
+    return `<tr>
+      <td style="color:var(--bark);font-size:13px">${d}</td>
+      <td style="font-weight:600">${e.provider}</td>
+      <td style="color:var(--bark)">${e.desc}</td>
+      <td><span class="category-badge" style="background:${col}22;color:${col}">${e.category}</span></td>
+      <td class="amount-cell">${fmt(e.amount)}</td>
+      <td><button class="delete-btn" onclick="deleteExpense('${e.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function deleteExpense(id) {
+  if(!confirm('Remove this expense?')) return;
+  expenses=expenses.filter(e=>e.id!==id);
+  saveData(); renderAll();
+}
+
+function renderProviders() {
+  const byP=groupBy(expenses,'provider');
+  const data=Object.entries(byP).map(([n,v])=>({name:n,total:v.reduce((s,e)=>s+Number(e.amount),0),count:v.length})).sort((a,b)=>b.total-a.total);
+  const max=Math.max(...data.map(d=>d.total));
+  document.getElementById('provider-grid').innerHTML=data.map((p,i)=>{
+    const pct=(p.total/max*100).toFixed(1);
+    return `<div class="provider-card">
+      <div class="provider-name">${p.name}</div>
+      <div class="provider-total">${fmt(p.total)}</div>
+      <div class="provider-bar-wrap"><div class="provider-bar" style="width:${pct}%;background:${PCOLS[i%PCOLS.length]}"></div></div>
+      <div class="provider-count">${p.count} transaction${p.count!==1?'s':''} &middot; ${pct}% of total</div>
+    </div>`;
+  }).join('');
+}
+
+function renderYearly() {
+  const byY=groupBy(expenses,'year');
+  const years=Object.keys(byY).sort();
+  const totals=years.map(y=>byY[y].reduce((s,e)=>s+Number(e.amount),0));
+  document.getElementById('yearly-cards').innerHTML=years.map((y,i)=>`
+    <div class="card">
+      <div class="card-label">${y}</div>
+      <div class="card-value">${fmt(totals[i])}</div>
+      <div class="card-sub">${byY[y].length} transactions</div>
+    </div>`).join('');
+  if(charts['yearly']) charts['yearly'].destroy();
+  charts['yearly']=new Chart(document.getElementById('chart-yearly').getContext('2d'),{
+    type:'bar',
+    data:{labels:years,datasets:[{label:'Spend',data:totals,backgroundColor:years.map((_,i)=>PCOLS[i]),borderRadius:10,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmt(c.raw)}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{family:'Nunito',size:14},color:'#7a5c3a'}},
+        y:{grid:{color:'rgba(196,168,130,.2)'},ticks:{callback:v=>'$'+Math.round(v/1000)+'k',font:{family:'Nunito',size:12},color:'#7a5c3a'}}
+      }}
+  });
+}
+
+function renderAll() { renderDashboard(); renderTable(); renderProviders(); renderYearly(); }
+
+function openModal() {
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('m-date').value=new Date().toISOString().slice(0,10);
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  ['m-date','m-amount','m-provider','m-desc','m-notes'].forEach(id=>document.getElementById(id).value='');
+}
+document.getElementById('modal-overlay').addEventListener('click',e=>{
+  if(e.target===document.getElementById('modal-overlay')) closeModal();
+});
+
+function saveExpense() {
+  const date=document.getElementById('m-date').value;
+  const amount=parseFloat(document.getElementById('m-amount').value);
+  const provider=document.getElementById('m-provider').value.trim();
+  const desc=document.getElementById('m-desc').value.trim();
+  const category=document.getElementById('m-cat').value;
+  const notes=document.getElementById('m-notes').value.trim();
+  if(!date||!amount||!provider||!desc){ alert('Please fill in Date, Amount, Provider, and Description.'); return; }
+  expenses.push({id:'e'+Date.now(),date,amount,provider,desc,category,notes,year:parseInt(date.slice(0,4))});
+  saveData(); closeModal(); renderAll();
+}
+</script>
+</body>
+</html>
