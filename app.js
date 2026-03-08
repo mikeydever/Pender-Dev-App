@@ -351,6 +351,22 @@ function applyExtractedExpenseFields(extracted, sourceLabel = 'OCR') {
   return true;
 }
 
+function applyReceiptDefaults(file, reason = '') {
+  const dateInput = document.getElementById('m-date');
+  const providerInput = document.getElementById('m-provider');
+  const descInput = document.getElementById('m-desc');
+  const catInput = document.getElementById('m-cat');
+  const notesInput = document.getElementById('m-notes');
+
+  if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+  if (providerInput && !providerInput.value.trim()) providerInput.value = 'Receipt Upload';
+  if (descInput && !descInput.value.trim()) descInput.value = `Receipt expense (${file?.name || 'upload'})`;
+  if (catInput && !catInput.value) catInput.value = 'Other';
+
+  const reasonNote = reason ? ` Extraction note: ${reason}` : '';
+  if (notesInput && !notesInput.value.trim()) notesInput.value = `Receipt uploaded without confident extraction.${reasonNote}`;
+}
+
 function hasMinimumFieldsForAutoSave() {
   const date = document.getElementById('m-date').value;
   const amount = parseFloat(document.getElementById('m-amount').value);
@@ -437,9 +453,11 @@ async function processReceiptFile(file) {
         await saveExpense({ automated: true });
       }
     } else {
+      applyReceiptDefaults(file, 'No OCR/AI extraction result');
       toast('Could not auto-read this receipt. Please fill manually.', true);
     }
   } catch (e) {
+    applyReceiptDefaults(file, e.message);
     toast(`Receipt read failed: ${e.message}`, true);
   } finally {
     isReceiptProcessing = false;
