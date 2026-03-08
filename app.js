@@ -676,16 +676,34 @@ function expenseMergeKey(row) {
 
 function expenseDedupeKey(row) {
   const rawDate = String(row.date || '').split('T')[0];
-  const provider = normalizeText(String(row.provider || '').toLowerCase());
-  const description = normalizeText(String(row.description || '').toLowerCase());
+  const provider = normalizeText(String(row.provider || '').toLowerCase()).replace(/[^a-z0-9]+/g, ' ').trim();
   const amountNum = Number(row.amount);
   const amount = Number.isFinite(amountNum) ? amountNum.toFixed(2) : '';
-  return `${rawDate}|${provider}|${description}|${amount}`;
+  return `${rawDate}|${provider}|${amount}`;
 }
 
 function isDuplicateExpense(row) {
   const key = expenseDedupeKey(row);
   return expenses.some(e => expenseDedupeKey(e) === key);
+}
+
+async function hasLiveDuplicateExpense(row) {
+  if (!supabaseClient || isLocalMode) return false;
+  try {
+    const amountNum = Number(row.amount);
+    if (!Number.isFinite(amountNum)) return false;
+    const { data, error } = await supabaseClient
+      .from('expenses')
+      .select('id,date,amount,provider')
+      .eq('date', String(row.date || '').split('T')[0])
+      .eq('amount', amountNum);
+    if (error) throw error;
+    const key = expenseDedupeKey(row);
+    return (data || []).some(existing => expenseDedupeKey(existing) === key);
+  } catch (e) {
+    console.warn('Could not run live duplicate check:', e);
+    return false;
+  }
 }
 
 function getAddedAtTimestamp(row) {
@@ -1072,6 +1090,17 @@ async function saveExpense(options = {}) {
       btn.textContent = 'Save Expense';
       toast('This expense has already been added.');
       return;
+    }
+
+    if (!isLocalMode && supabaseClient) {
+      const duplicateInLive = await hasLiveDuplicateExpense(baseExp);
+      if (duplicateInLive) {
+        setSyncing(false);
+        btn.disabled = false;
+        btn.textContent = 'Save Expense';
+        toast('This expense has already been added.');
+        return;
+      }
     }
 
     let receipt_url = null;
