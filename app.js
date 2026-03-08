@@ -992,9 +992,15 @@ async function saveExpense(options = {}) {
 
     if (selectedFile && !isLocalMode && supabaseClient) {
       btn.textContent = 'Uploading…';
-      const result = await uploadReceipt(selectedFile);
-      receipt_url = result.url;
-      receipt_name = result.name;
+      try {
+        const result = await uploadReceipt(selectedFile);
+        receipt_url = result.url;
+        receipt_name = result.name;
+      } catch (uploadError) {
+        console.warn('Receipt upload failed:', uploadError);
+        toast(`Receipt upload failed; saving expense without attachment (${uploadError.message})`, true);
+      }
+      btn.textContent = 'Saving…';
     }
 
     const newExp = {
@@ -1029,26 +1035,10 @@ async function saveExpense(options = {}) {
     notifySpreadsheetEmail('insert', data);
     if (automated) revealSavedExpense(data);
   } catch (e) {
-    const fallbackExp = {
-      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      date,
-      amount,
-      provider,
-      description: desc,
-      category,
-      notes,
-      year: parseInt(date.slice(0, 4)),
-      receipt_url: null,
-      receipt_name: null
-    };
-    expenses.unshift(fallbackExp);
-    addLocalExpense(fallbackExp);
-    isLocalMode = true;
-    setLocalModeSync();
-    closeModal();
-    renderAll();
-    toast(`Saved locally (sync error: ${e.message})`, true);
-    if (automated) revealSavedExpense(fallbackExp);
+    setSyncing(false, true);
+    btn.disabled = false;
+    btn.textContent = 'Save Expense';
+    toast(`Could not save to live database: ${e.message}`, true);
   }
 }
 
