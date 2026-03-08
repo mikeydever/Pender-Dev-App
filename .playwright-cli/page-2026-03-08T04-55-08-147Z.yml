@@ -1,0 +1,8 @@
+- generic [ref=e3]:
+  - generic [ref=e4]: 🌿
+  - heading "Connect to Supabase" [level=2] [ref=e5]
+  - paragraph [ref=e6]: Enter your Supabase project credentials to connect the app to your database. You only need to do this once — they'll be saved in your browser.
+  - textbox "Project URL" [ref=e7]: https://ibjocekpexrmpkyuhgtv.supabase.co
+  - textbox "Anon / Public API Key" [ref=e8]
+  - button "Connect Database" [ref=e9] [cursor=pointer]
+  - paragraph [ref=e10]: Find these in your Supabase project → Settings → API

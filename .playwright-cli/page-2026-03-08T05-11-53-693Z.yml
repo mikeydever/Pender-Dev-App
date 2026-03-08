@@ -1,0 +1,49 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - generic [ref=e15]: 🌲
+        - generic [ref=e16]:
+          - generic [ref=e17]: Pender Island
+          - generic [ref=e18]: Property Development
+      - generic [ref=e19]:
+        - generic [ref=e22]: Local
+        - button "🔒 Lock" [ref=e23] [cursor=pointer]
+    - generic [ref=e24]:
+      - generic [ref=e25] [cursor=pointer]: Dashboard
+      - generic [ref=e26] [cursor=pointer]: All Expenses
+      - generic [ref=e27] [cursor=pointer]: By Provider
+      - generic [ref=e28] [cursor=pointer]: By Year
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e32]: Property Purchase
+          - generic [ref=e33]: $500,000
+        - generic [ref=e35]:
+          - generic [ref=e36]: Development Costs
+          - generic [ref=e37]: $379,288.20
+        - generic [ref=e39]:
+          - generic [ref=e40]: Total Investment
+          - generic [ref=e41]: $879,288.20
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - generic [ref=e44]: Total Development Spend
+          - generic [ref=e45]: $379,288.20
+          - generic [ref=e46]: Above property purchase price
+        - generic [ref=e47]:
+          - generic [ref=e48]: Transactions
+          - generic [ref=e49]: "96"
+          - generic [ref=e50]: Recorded expenses
+        - generic [ref=e51]:
+          - generic [ref=e52]: Top Provider
+          - generic [ref=e53]: RKR Holdings Ltd.
+          - generic [ref=e54]: $131,227.92 total
+        - generic [ref=e55]:
+          - generic [ref=e56]: Receipts Attached
+          - generic [ref=e57]: "0"
+          - generic [ref=e58]: PDFs & photos stored
+      - generic [ref=e59]:
+        - generic [ref=e61]: Spend by Provider (Top 8)
+        - generic [ref=e65]: Spend by Category
+      - generic [ref=e70]: Monthly Spend — All Years
+  - generic [ref=e11]: Loaded 96 imported spreadsheet entries
