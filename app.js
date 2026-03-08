@@ -4,6 +4,7 @@ const PASSWORD = 'pender2024';
 const PROPERTY_COST = 500000;
 const CONFIG_KEY = 'pender_supabase_config';
 const SEED_DATA_PATH = 'expenses_seed.json';
+const LOCAL_EXPENSES_KEY = 'pender_local_expenses';
 
 const CAT_COLORS = {
   'Construction / Labour': '#4a7c59', 'Materials & Supplies': '#8aab7e',
@@ -28,7 +29,7 @@ async function startup() {
     if (!config) {
       const seeded = await loadSeedExpenses();
       if (seeded.length) {
-        expenses = withResolvedCategories(seeded);
+        expenses = withResolvedCategories(mergeWithLocal(seeded));
         isLocalMode = true;
         hide('loading-screen');
         show('login-screen');
@@ -142,7 +143,7 @@ async function loadData() {
     if (error) throw error;
     if (data && data.length) {
       const merged = await maybeBackfillSupabase(data);
-      expenses = withResolvedCategories(merged.rows);
+      expenses = withResolvedCategories(mergeWithLocal(merged.rows));
       isLocalMode = false;
       setSyncing(false);
       initApp();
@@ -162,7 +163,7 @@ async function loadData() {
             .select('*')
             .order('date', { ascending: false });
           if (!seededLoadError && seededData && seededData.length) {
-            expenses = withResolvedCategories(seededData);
+            expenses = withResolvedCategories(mergeWithLocal(seededData));
             isLocalMode = false;
             setSyncing(false);
             initApp();
@@ -171,7 +172,7 @@ async function loadData() {
           }
         }
       }
-      expenses = withResolvedCategories(seeded);
+      expenses = withResolvedCategories(mergeWithLocal(seeded));
       isLocalMode = seeded.length > 0;
       setSyncing(false);
       if (isLocalMode) setLocalModeSync();
@@ -181,7 +182,7 @@ async function loadData() {
   } catch (e) {
     const seeded = await loadSeedExpenses();
     if (seeded.length) {
-      expenses = withResolvedCategories(seeded);
+      expenses = withResolvedCategories(mergeWithLocal(seeded));
       isLocalMode = true;
       setSyncing(false);
       setLocalModeSync();
@@ -220,13 +221,55 @@ async function loadSeedExpenses() {
   }
 }
 
+function getLocalExpenses() {
+  try {
+    const raw = localStorage.getItem(LOCAL_EXPENSES_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.warn('Could not load local expenses:', e);
+    return [];
+  }
+}
+
+function setLocalExpenses(rows) {
+  try {
+    localStorage.setItem(LOCAL_EXPENSES_KEY, JSON.stringify(rows));
+  } catch (e) {
+    console.warn('Could not save local expenses:', e);
+  }
+}
+
+function addLocalExpense(row) {
+  const rows = getLocalExpenses();
+  rows.unshift(row);
+  setLocalExpenses(rows);
+}
+
+function removeLocalExpense(id) {
+  const rows = getLocalExpenses().filter(r => r.id !== id);
+  setLocalExpenses(rows);
+}
+
+function mergeWithLocal(rows) {
+  const base = Array.isArray(rows) ? rows : [];
+  const locals = getLocalExpenses();
+  if (!locals.length) return base;
+  const keys = new Set(base.map(expenseMergeKey));
+  const extras = locals.filter(r => !keys.has(expenseMergeKey(r)));
+  return [...extras, ...base];
+}
+
 function expenseMergeKey(row) {
   const rawDate = String(row.date || '').split('T')[0];
   const provider = String(row.provider || '').trim().toLowerCase();
+  const description = String(row.description || '').trim().toLowerCase();
+  const category = String(row.category || '').trim().toLowerCase();
   const year = String(row.year || '');
   const amountNum = Number(row.amount);
   const amount = Number.isFinite(amountNum) ? amountNum.toFixed(2) : String(row.amount || '');
-  return `${rawDate}|${provider}|${year}|${amount}`;
+  return `${rawDate}|${provider}|${description}|${category}|${year}|${amount}`;
 }
 
 async function maybeBackfillSupabase(existingRows) {
@@ -405,8 +448,11 @@ function renderTable() {
 }
 
 async function deleteExpense(id) {
-  if (isLocalMode || !supabaseClient) {
-    toast('Connect Supabase to delete expenses', true);
+  if (id.startsWith('local-') || isLocalMode || !supabaseClient) {
+    expenses = expenses.filter(e => e.id !== id);
+    removeLocalExpense(id);
+    renderAll();
+    toast('Local expense deleted');
     return;
   }
   if (!confirm('Remove this expense?')) return;
@@ -511,10 +557,6 @@ async function uploadReceipt(file) {
 
 // ── MODAL ───────────────────────────────────────────────────────
 function openModal() {
-  if (isLocalMode || !supabaseClient) {
-    toast('Connect Supabase to add expenses', true);
-    return;
-  }
   document.getElementById('modal-overlay').classList.add('open');
   document.getElementById('m-date').value = new Date().toISOString().slice(0, 10);
 }
@@ -529,10 +571,6 @@ document.getElementById('modal-overlay').addEventListener('click', e => {
 });
 
 async function saveExpense() {
-  if (isLocalMode || !supabaseClient) {
-    toast('Connect Supabase to save expenses', true);
-    return;
-  }
   const date = document.getElementById('m-date').value;
   const amount = parseFloat(document.getElementById('m-amount').value);
   const provider = document.getElementById('m-provider').value.trim();
@@ -545,13 +583,13 @@ async function saveExpense() {
   const btn = document.getElementById('save-btn');
   btn.disabled = true;
   btn.textContent = 'Saving…';
-  setSyncing(true);
+  if (!isLocalMode && supabaseClient) setSyncing(true);
 
   try {
     let receipt_url = null;
     let receipt_name = null;
 
-    if (selectedFile) {
+    if (selectedFile && !isLocalMode && supabaseClient) {
       btn.textContent = 'Uploading…';
       const result = await uploadReceipt(selectedFile);
       receipt_url = result.url;
@@ -567,6 +605,17 @@ async function saveExpense() {
       receipt_name
     };
 
+    if (isLocalMode || !supabaseClient) {
+      const localExp = { ...newExp, id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+      expenses.unshift(localExp);
+      addLocalExpense(localExp);
+      setLocalModeSync();
+      closeModal();
+      renderAll();
+      toast('Expense saved locally ✓');
+      return;
+    }
+
     const { data, error } = await supabaseClient.from('expenses').insert([newExp]).select().single();
     if (error) throw error;
 
@@ -576,10 +625,25 @@ async function saveExpense() {
     renderAll();
     toast('Expense saved ✓');
   } catch (e) {
-    setSyncing(false, true);
-    toast('Error saving: ' + e.message, true);
-    btn.disabled = false;
-    btn.textContent = 'Save Expense';
+    const fallbackExp = {
+      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      date,
+      amount,
+      provider,
+      description: desc,
+      category,
+      notes,
+      year: parseInt(date.slice(0, 4)),
+      receipt_url: null,
+      receipt_name: null
+    };
+    expenses.unshift(fallbackExp);
+    addLocalExpense(fallbackExp);
+    isLocalMode = true;
+    setLocalModeSync();
+    closeModal();
+    renderAll();
+    toast(`Saved locally (sync error: ${e.message})`, true);
   }
 }
 
