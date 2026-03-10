@@ -1,0 +1,41 @@
+name: PR Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  syntax-and-static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: JavaScript syntax checks
+        run: |
+          node --check app.js
+          node --check check.js
+          node --check check2.js
+          node --check check3.js
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Edge function type checks
+        run: |
+          deno check supabase/functions/upload-receipt/index.ts
+          deno check supabase/functions/extract-receipt-expense/index.ts
+          deno check supabase/functions/email-expenses-update/index.ts
+
+      - name: Shell syntax checks
+        run: |
+          bash -n scripts/deploy_edge_functions.sh
