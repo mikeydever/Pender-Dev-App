@@ -103,15 +103,26 @@ function inferCategory(expense) {
 }
 
 function withResolvedCategories(rows) {
-  return rows.map(row => ({ ...row, category: inferCategory(row) }));
+  return rows.map(row => {
+    const normalizedProvider = normalizeProviderName(row.provider);
+    return {
+      ...row,
+      provider: normalizedProvider,
+      category: inferCategory({ ...row, provider: normalizedProvider }),
+    };
+  });
 }
 
 function normalizeText(text) {
   return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
+function normalizeProviderName(provider) {
+  return normalizeText(provider).replace(/\s*-\s*/g, '-');
+}
+
 function isLikelyBadProvider(provider) {
-  const value = normalizeText(provider).toLowerCase();
+  const value = normalizeProviderName(provider).toLowerCase();
   if (!value) return true;
   if (/^x\s*\d+$/i.test(value)) return true;
   if (/^[\d\W_]+$/.test(value)) return true;
@@ -345,7 +356,7 @@ function applyExtractedExpenseFields(extracted, sourceLabel = 'OCR') {
   if (!extracted) return false;
   if (extracted.date) document.getElementById('m-date').value = toIsoDate(extracted.date) || document.getElementById('m-date').value;
   if (extracted.amount) document.getElementById('m-amount').value = Number(extracted.amount).toFixed(2);
-  if (extracted.provider) document.getElementById('m-provider').value = extracted.provider;
+  if (extracted.provider) document.getElementById('m-provider').value = normalizeProviderName(extracted.provider);
   if (extracted.description) document.getElementById('m-desc').value = extracted.description;
   const category = inferCategory({
     provider: extracted.provider || '',
@@ -377,7 +388,7 @@ function applyReceiptDefaults(file, reason = '') {
 function hasMinimumFieldsForAutoSave() {
   const date = document.getElementById('m-date').value;
   const amount = parseFloat(document.getElementById('m-amount').value);
-  const provider = document.getElementById('m-provider').value.trim();
+  const provider = normalizeProviderName(document.getElementById('m-provider').value);
   const desc = document.getElementById('m-desc').value.trim();
   return Boolean(date && Number.isFinite(amount) && amount > 0 && provider && desc);
 }
@@ -665,7 +676,7 @@ function mergeWithLocal(rows) {
 
 function expenseMergeKey(row) {
   const rawDate = String(row.date || '').split('T')[0];
-  const provider = String(row.provider || '').trim().toLowerCase();
+  const provider = normalizeProviderName(row.provider).toLowerCase();
   const description = String(row.description || '').trim().toLowerCase();
   const category = String(row.category || '').trim().toLowerCase();
   const year = String(row.year || '');
@@ -676,7 +687,7 @@ function expenseMergeKey(row) {
 
 function expenseDedupeKey(row) {
   const rawDate = String(row.date || '').split('T')[0];
-  const provider = normalizeText(String(row.provider || '').toLowerCase()).replace(/[^a-z0-9]+/g, ' ').trim();
+  const provider = normalizeProviderName(String(row.provider || '').toLowerCase()).replace(/[^a-z0-9]+/g, ' ').trim();
   const amountNum = Number(row.amount);
   const amount = Number.isFinite(amountNum) ? amountNum.toFixed(2) : '';
   return `${rawDate}|${provider}|${amount}`;
@@ -1095,7 +1106,7 @@ async function saveExpense(options = {}) {
   const automated = Boolean(options.automated);
   const date = document.getElementById('m-date').value;
   const amount = parseFloat(document.getElementById('m-amount').value);
-  const provider = document.getElementById('m-provider').value.trim();
+  const provider = normalizeProviderName(document.getElementById('m-provider').value);
   const desc = document.getElementById('m-desc').value.trim();
   const category = document.getElementById('m-cat').value;
   const notes = document.getElementById('m-notes').value.trim();
