@@ -34,6 +34,7 @@ let isLocalMode = false;
 let isReceiptProcessing = false;
 let lastAutoSaveSignature = '';
 let lastAutoSaveAt = 0;
+let editingExpenseId = null;
 
 // ── INIT ────────────────────────────────────────────────────────
 async function startup() {
@@ -665,6 +666,14 @@ function removeLocalExpense(id) {
   setLocalExpenses(rows);
 }
 
+function upsertLocalExpense(row) {
+  const rows = getLocalExpenses();
+  const idx = rows.findIndex(r => r.id === row.id);
+  if (idx >= 0) rows[idx] = row;
+  else rows.unshift(row);
+  setLocalExpenses(rows);
+}
+
 function mergeWithLocal(rows) {
   const base = Array.isArray(rows) ? rows : [];
   const locals = getLocalExpenses();
@@ -693,12 +702,12 @@ function expenseDedupeKey(row) {
   return `${rawDate}|${provider}|${amount}`;
 }
 
-function isDuplicateExpense(row) {
+function isDuplicateExpense(row, excludeId = null) {
   const key = expenseDedupeKey(row);
-  return expenses.some(e => expenseDedupeKey(e) === key);
+  return expenses.some(e => e.id !== excludeId && expenseDedupeKey(e) === key);
 }
 
-async function hasLiveDuplicateExpense(row) {
+async function hasLiveDuplicateExpense(row, excludeId = null) {
   if (!supabaseClient || isLocalMode) return false;
   try {
     const amountNum = Number(row.amount);
@@ -710,7 +719,7 @@ async function hasLiveDuplicateExpense(row) {
       .eq('amount', amountNum);
     if (error) throw error;
     const key = expenseDedupeKey(row);
-    return (data || []).some(existing => expenseDedupeKey(existing) === key);
+    return (data || []).some(existing => existing.id !== excludeId && expenseDedupeKey(existing) === key);
   } catch (e) {
     console.warn('Could not run live duplicate check:', e);
     return false;
@@ -955,7 +964,10 @@ function renderTable() {
       <td><span class="category-badge" style="background:${col}22;color:${col}">${e.category}</span></td>
       <td class="amount-cell">${fmt(e.amount)}</td>
       <td>${receipt}</td>
-      <td><button class="delete-btn" onclick="deleteExpense('${e.id}')">✕</button></td>
+      <td class="action-cell">
+        <button class="edit-btn" onclick="openModal('${e.id}')" title="Edit expense">Edit</button>
+        <button class="delete-btn" onclick="deleteExpense('${e.id}')" title="Delete expense">✕</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -1088,11 +1100,45 @@ async function uploadReceiptViaEdge(file) {
 }
 
 // ── MODAL ───────────────────────────────────────────────────────
-function openModal() {
+function openModal(expenseId = null) {
+  editingExpenseId = expenseId;
+  const isEditing = Boolean(editingExpenseId);
+  const title = document.getElementById('modal-title');
+  const saveBtn = document.getElementById('save-btn');
+  const receiptGroup = document.getElementById('receipt-group');
+
+  if (isEditing) {
+    const current = expenses.find(e => e.id === editingExpenseId);
+    if (!current) {
+      editingExpenseId = null;
+      toast('Could not find expense to edit', true);
+      return;
+    }
+    title.textContent = 'Edit Expense';
+    saveBtn.textContent = 'Save Changes';
+    receiptGroup.style.display = 'none';
+    clearFile();
+
+    document.getElementById('m-date').value = String(current.date || '').slice(0, 10);
+    document.getElementById('m-amount').value = Number(current.amount || 0).toFixed(2);
+    document.getElementById('m-provider').value = current.provider || '';
+    document.getElementById('m-desc').value = current.description || '';
+    document.getElementById('m-cat').value = current.category || 'Other';
+    document.getElementById('m-notes').value = current.notes || '';
+  } else {
+    title.textContent = 'Add Expense';
+    saveBtn.textContent = 'Save Expense';
+    receiptGroup.style.display = 'block';
+    document.getElementById('m-date').value = new Date().toISOString().slice(0, 10);
+  }
+
   document.getElementById('modal-overlay').classList.add('open');
-  document.getElementById('m-date').value = new Date().toISOString().slice(0, 10);
 }
 function closeModal() {
+  editingExpenseId = null;
+  document.getElementById('modal-title').textContent = 'Add Expense';
+  document.getElementById('save-btn').textContent = 'Save Expense';
+  document.getElementById('receipt-group').style.display = 'block';
   document.getElementById('modal-overlay').classList.remove('open');
   ['m-date', 'm-amount', 'm-provider', 'm-desc', 'm-notes'].forEach(id => document.getElementById(id).value = '');
   clearFile();
@@ -1104,14 +1150,21 @@ document.getElementById('modal-overlay').addEventListener('click', e => {
 
 async function saveExpense(options = {}) {
   const automated = Boolean(options.automated);
+  const editing = Boolean(editingExpenseId);
+  const existingExpense = editing ? expenses.find(e => e.id === editingExpenseId) : null;
+  if (editing && !existingExpense) {
+    toast('Could not find expense to update', true);
+    return;
+  }
   const date = document.getElementById('m-date').value;
   const amount = parseFloat(document.getElementById('m-amount').value);
   const provider = normalizeProviderName(document.getElementById('m-provider').value);
   const desc = document.getElementById('m-desc').value.trim();
   const category = document.getElementById('m-cat').value;
   const notes = document.getElementById('m-notes').value.trim();
+  const defaultButtonLabel = editing ? 'Save Changes' : 'Save Expense';
 
-  if (!date || !amount || !provider || !desc) {
+  if (!date || !Number.isFinite(amount) || amount <= 0 || !provider || !desc) {
     if (!automated) toast('Please fill in all required fields', true);
     return;
   }
@@ -1129,26 +1182,67 @@ async function saveExpense(options = {}) {
       description: desc,
       category,
       notes,
-      year: parseInt(date.slice(0, 4)),
+      year: parseInt(date.slice(0, 4), 10),
     };
 
-    if (isDuplicateExpense(baseExp)) {
+    if (isDuplicateExpense(baseExp, editing ? editingExpenseId : null)) {
       if (!isLocalMode && supabaseClient) setSyncing(false);
       btn.disabled = false;
-      btn.textContent = 'Save Expense';
+      btn.textContent = defaultButtonLabel;
       toast('This expense has already been added.');
       return;
     }
 
     if (!isLocalMode && supabaseClient) {
-      const duplicateInLive = await hasLiveDuplicateExpense(baseExp);
+      const duplicateInLive = await hasLiveDuplicateExpense(baseExp, editing ? editingExpenseId : null);
       if (duplicateInLive) {
         setSyncing(false);
         btn.disabled = false;
-        btn.textContent = 'Save Expense';
+        btn.textContent = defaultButtonLabel;
         toast('This expense has already been added.');
         return;
       }
+    }
+
+    if (editing) {
+      const updatedExp = {
+        ...existingExpense,
+        ...baseExp,
+      };
+
+      if (editingExpenseId.startsWith('local-') || isLocalMode || !supabaseClient) {
+        expenses = expenses.map(e => (e.id === editingExpenseId ? updatedExp : e));
+        if (editingExpenseId.startsWith('local-')) upsertLocalExpense(updatedExp);
+        if (isLocalMode || !supabaseClient) setLocalModeSync();
+        closeModal();
+        renderAll();
+        toast('Expense updated locally ✓');
+        return;
+      }
+
+      const { data, error } = await supabaseClient
+        .from('expenses')
+        .update({
+          date: updatedExp.date,
+          amount: updatedExp.amount,
+          provider: updatedExp.provider,
+          description: updatedExp.description,
+          category: updatedExp.category,
+          notes: updatedExp.notes,
+          year: updatedExp.year,
+        })
+        .eq('id', editingExpenseId)
+        .select()
+        .single();
+      if (error) throw error;
+
+      expenses = expenses.map(e => (e.id === editingExpenseId ? data : e));
+      setSyncing(false);
+      closeModal();
+      renderAll();
+      toast('Expense updated ✓');
+      notifySpreadsheetEmail('update', data);
+      return;
     }
 
     let receipt_url = null;
@@ -1203,7 +1297,7 @@ async function saveExpense(options = {}) {
   } catch (e) {
     setSyncing(false, true);
     btn.disabled = false;
-    btn.textContent = 'Save Expense';
+    btn.textContent = defaultButtonLabel;
     const message = String(e?.message || e || 'unknown error');
     if (/duplicate key|unique constraint|already exists/i.test(message)) {
       toast('This expense has already been added.');

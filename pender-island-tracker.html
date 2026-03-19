@@ -134,12 +134,16 @@ body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);mi
 .expense-table td{padding:12px 16px;font-size:14px;border-bottom:1px solid rgba(232,220,200,.5);vertical-align:middle;}
 .expense-table tr:last-child td{border-bottom:none;}
 .expense-table tr:hover td{background:rgba(232,220,200,.2);}
-.amount-cell{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;color:var(--forest);}
+.amount-cell{font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;color:var(--forest);font-variant-numeric:tabular-nums;}
 .category-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
 .receipt-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--moss);
   text-decoration:none;padding:3px 8px;border-radius:6px;border:1px solid var(--moss);
   transition:background .2s;}
 .receipt-link:hover{background:rgba(74,124,89,.1);}
+.action-cell{display:flex;align-items:center;gap:6px;}
+.edit-btn{background:var(--paper2);border:1px solid var(--driftwood);border-radius:6px;cursor:pointer;
+  color:var(--bark);font-size:12px;font-weight:700;padding:4px 8px;transition:background .2s,border-color .2s;}
+.edit-btn:hover{background:var(--sand);border-color:var(--bark);}
 .delete-btn{background:none;border:none;cursor:pointer;color:var(--driftwood);font-size:16px;
   padding:4px 8px;border-radius:6px;transition:color .2s,background .2s;}
 .delete-btn:hover{color:var(--rust);background:rgba(184,90,42,.08);}
@@ -360,7 +364,7 @@ body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);mi
       <div style="overflow-x:auto">
         <table class="expense-table">
           <thead>
-            <tr><th>Date</th><th>Provider</th><th>Description</th><th>Category</th><th>Amount</th><th>Receipt</th><th></th></tr>
+            <tr><th>Date</th><th>Provider</th><th>Description</th><th>Category</th><th>Amount</th><th>Receipt</th><th>Actions</th></tr>
           </thead>
           <tbody id="expense-tbody"></tbody>
         </table>
@@ -388,7 +392,7 @@ body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);mi
 <!-- ADD EXPENSE MODAL -->
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal">
-    <h2>Add Expense</h2>
+    <h2 id="modal-title">Add Expense</h2>
     <div class="form-row">
       <div class="form-group"><label>Date</label><input type="date" id="m-date"></div>
       <div class="form-group"><label>Amount ($)</label><input type="number" id="m-amount" placeholder="0.00" step="0.01"></div>
@@ -411,7 +415,7 @@ body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);mi
       </select>
     </div>
     <div class="form-group"><label>Notes (optional)</label><textarea id="m-notes" rows="2" placeholder="Any extra details…"></textarea></div>
-    <div class="form-group">
+    <div class="form-group" id="receipt-group">
       <label>Receipt (optional)</label>
       <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()"
         ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
@@ -439,6 +443,6 @@ body{font-family:'Nunito',sans-serif;background:var(--paper);color:var(--ink);mi
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=20260308-20"></script>
+<script src="app.js?v=20260319-01"></script>
 </body>
 </html>
